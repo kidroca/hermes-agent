@@ -27,6 +27,7 @@ from tools.environments.file_sync import (
     quoted_rm_command,
     unique_parent_dirs,
 )
+from tools.environments.local import build_subprocess_env
 
 logger = logging.getLogger(__name__)
 
@@ -252,12 +253,16 @@ class SSHEnvironment(BaseEnvironment):
                     ),
                 )
 
-        # Symlink staging avoids fragile GNU tar --transform rules.
-        # On Windows without Developer Mode, symlink creation raises
-        # OSError with winerror 1314 (privilege not held).  Catch only
-        # that specific error and fall back to a plain copy; all other
-        # OSErrors (e.g. disk full, bad path) are re-raised as normal.
+        # Symlink staging avoids fragile GNU tar --transform rules. Archive
+        # only explicit file entries instead of the staging root, otherwise
+        # remote tar sees parent directory headers like `.` and may fail while
+        # trying to restore metadata on restricted systems such as TrueNAS.
+        # On Windows without Developer Mode, symlink creation raises OSError
+        # with winerror 1314 (privilege not held).  Catch only that specific
+        # error and fall back to a plain copy; all other OSErrors (e.g. disk
+        # full, bad path) are re-raised as normal.
         with tempfile.TemporaryDirectory(prefix="hermes-ssh-bulk-") as staging:
+            tar_entries: list[str] = []
             for host_path, remote_path in files:
                 try:
                     rel_remote = os.path.relpath(remote_path, base)
@@ -281,8 +286,17 @@ class SSHEnvironment(BaseEnvironment):
                         shutil.copy2(host_path, staged)
                     else:
                         raise
+                tar_entries.append(rel_remote)
 
-            tar_cmd = ["tar", "-chf", "-", "-C", staging, "."]
+            manifest_path = os.path.join(staging, ".hermes-tar-entries")
+            with open(manifest_path, "w", encoding="utf-8") as manifest:
+                manifest.write("\n".join(tar_entries))
+                manifest.write("\n")
+
+            tar_cmd = [
+                "tar", "--no-xattrs", "-chf", "-",
+                "-C", staging, "-T", manifest_path,
+            ]
             ssh_cmd = self._build_ssh_command()
             # --no-overwrite-dir prevents tar from overwriting the mode of
             # existing directories (e.g. /home/<user>) with the staging
@@ -290,11 +304,21 @@ class SSHEnvironment(BaseEnvironment):
             # dirs which breaks sshd StrictModes (refuses authorized_keys).
             ssh_cmd.append(f"tar xf - --no-overwrite-dir -C {shlex.quote(base)}")
 
+            # Preserve the caller's environment for the local tar process while
+            # routing through the shared spawn-env guard. SSH sync may need
+            # caller credentials/config, so this intentionally keeps secrets
+            # and the real HOME; COPYFILE_DISABLE suppresses macOS metadata.
+            tar_env = build_subprocess_env(
+                scrub_secrets=False,
+                inherit_profile_home=False,
+                extra={"COPYFILE_DISABLE": "1"},
+            )
             tar_proc = subprocess.Popen(
                 tar_cmd,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=tar_env,
             )
             try:
                 ssh_proc = subprocess.Popen(
