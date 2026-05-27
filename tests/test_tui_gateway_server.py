@@ -315,6 +315,39 @@ def test_write_json_drops_detached_ws_frames(monkeypatch):
         server._sessions.pop("detached-sid", None)
 
 
+def test_get_usage_estimates_context_when_provider_usage_missing():
+    agent = types.SimpleNamespace(
+        model="gpt-5.5",
+        session_input_tokens=0,
+        session_prompt_tokens=0,
+        session_output_tokens=0,
+        session_completion_tokens=0,
+        session_cache_read_tokens=0,
+        session_cache_write_tokens=0,
+        session_reasoning_tokens=0,
+        session_total_tokens=0,
+        session_api_calls=0,
+        _cached_system_prompt="system prompt with enough text to count",
+        context_compressor=types.SimpleNamespace(
+            last_prompt_tokens=0,
+            context_length=272_000,
+            compression_count=0,
+        ),
+    )
+
+    usage = server._get_usage(
+        agent,
+        [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "world"},
+        ],
+    )
+
+    assert usage["context_max"] == 272_000
+    assert usage["context_used"] > 0
+    assert usage["context_percent"] >= 0
+
+
 def test_tui_verbose_tool_details_fail_closed_when_redaction_fails(monkeypatch):
     redact_module = types.ModuleType("agent.redact")
 
@@ -4725,7 +4758,7 @@ def test_prompt_submit_history_version_mismatch_surfaces_warning(monkeypatch):
     emits: list[tuple] = []
     try:
         monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
-        monkeypatch.setattr(server, "_get_usage", lambda _a: {})
+        monkeypatch.setattr(server, "_get_usage", lambda _a, _m=None: {})
         monkeypatch.setattr(server, "render_message", lambda _t, _c: "")
         monkeypatch.setattr(server, "_emit", lambda *a: emits.append(a))
 
@@ -4782,7 +4815,7 @@ def test_prompt_submit_history_version_match_persists_normally(monkeypatch):
     emits: list[tuple] = []
     try:
         monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
-        monkeypatch.setattr(server, "_get_usage", lambda _a: {})
+        monkeypatch.setattr(server, "_get_usage", lambda _a, _m=None: {})
         monkeypatch.setattr(server, "render_message", lambda _t, _c: "")
         monkeypatch.setattr(server, "_emit", lambda *a: emits.append(a))
 

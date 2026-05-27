@@ -2971,7 +2971,32 @@ def _sync_session_key_after_compress(
             pass
 
 
-def _get_usage(agent) -> dict:
+def _estimated_context_tokens(agent, messages: list | None = None) -> int:
+    """Best-effort context token estimate for runtimes that do not report usage.
+
+    Codex app-server currently returns no token accounting, which used to leave
+    the TUI status bar stuck at ``0/<ctx>`` even though the model context was
+    obviously non-empty. Use the same rough estimator the compressor uses so the
+    footer remains informative instead of confidently useless.
+    """
+    if not messages:
+        return 0
+    try:
+        from agent.model_metadata import estimate_messages_tokens_rough
+
+        estimate_messages = list(messages)
+        system_prompt = getattr(agent, "_cached_system_prompt", "") or ""
+        if system_prompt:
+            estimate_messages = [
+                {"role": "system", "content": system_prompt},
+                *estimate_messages,
+            ]
+        return int(estimate_messages_tokens_rough(estimate_messages) or 0)
+    except Exception:
+        return 0
+
+
+def _get_usage(agent, messages: list | None = None) -> dict:
     g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
     usage = {
         "model": getattr(agent, "model", "") or "",
@@ -2991,25 +3016,24 @@ def _get_usage(agent) -> dict:
         # substitution showed lifetime totals as the live context fill, yielding
         # impossible readings such as 1.9m/120k clamped to 100% (#50421).
         #
-        # Per the issue, populate context_used/percent only from a *real*
-        # current-occupancy value and "leave it unknown otherwise" — so a falsy
-        # last_prompt_tokens (0 or missing, i.e. an engine that doesn't track
-        # per-window occupancy) intentionally emits no gauge rather than a
-        # fabricated 0% or the old cumulative reading. The built-in compressor
-        # always reports a real last_prompt_tokens once a turn runs, so it is
-        # unaffected.
+        # Prefer the real compressor-reported current occupancy. When provider
+        # token usage is missing, use a rough estimate from the current message
+        # window instead of cumulative lifetime totals. If neither source is
+        # available, leave the gauge unknown.
         # Clamp the -1 "compression just ran, awaiting real usage" sentinel
         # (conversation_compression.py) to 0 so the transitional turn reads as
         # unknown (no gauge) instead of leaking context_used=-1. Matches the
         # CLI status-bar path (cli.py _get_status_bar_snapshot).
-        last_prompt = getattr(comp, "last_prompt_tokens", 0) or 0
-        if last_prompt < 0:
-            last_prompt = 0
+        ctx_used = getattr(comp, "last_prompt_tokens", 0) or 0
+        if ctx_used < 0:
+            ctx_used = 0
+        if not ctx_used:
+            ctx_used = _estimated_context_tokens(agent, messages)
         ctx_max = getattr(comp, "context_length", 0) or 0
-        if ctx_max and last_prompt:
-            usage["context_used"] = last_prompt
+        if ctx_max and ctx_used:
+            usage["context_used"] = ctx_used
             usage["context_max"] = ctx_max
-            usage["context_percent"] = max(0, min(100, round(last_prompt / ctx_max * 100)))
+            usage["context_percent"] = max(0, min(100, round(ctx_used / ctx_max * 100)))
         usage["compressions"] = getattr(comp, "compression_count", 0) or 0
     # Live count of background/async subagents still running (delegate_task
     # batches + background single delegations). Mirrors the classic CLI status
@@ -3029,6 +3053,13 @@ def _get_usage(agent) -> dict:
         except Exception:
             pass
     return usage
+
+
+def _session_history_for_usage(session: dict | None) -> list:
+    try:
+        return list((session or {}).get("history", []))
+    except Exception:
+        return []
 
 
 def _probe_credentials(agent) -> str:
@@ -6213,7 +6244,7 @@ def _(rid, params: dict) -> dict:
         return err
     agent = session.get("agent")
     usage: dict = (
-        _get_usage(agent)
+        _get_usage(agent, _session_history_for_usage(session))
         if agent is not None
         else {"calls": 0, "input": 0, "output": 0, "total": 0}
     )
@@ -7523,7 +7554,7 @@ def _(rid, params: dict) -> dict:
             updated = _dt(meta.get(field), created)
             break
 
-    usage = _get_usage(agent) if agent is not None else {}
+    usage = _get_usage(agent, _session_history_for_usage(session)) if agent is not None else {}
     provider = getattr(agent, "provider", None) or "unknown"
     model = getattr(agent, "model", None) or "(unknown)"
     lines = [
@@ -8726,7 +8757,9 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                 raw = str(result)
                 status = "complete"
 
-            payload = {"text": raw, "usage": _get_usage(agent), "status": status}
+            result_messages = result.get("messages") if isinstance(result, dict) else None
+            usage_messages = result_messages if isinstance(result_messages, list) else _session_history_for_usage(session)
+            payload = {"text": raw, "usage": _get_usage(agent, usage_messages), "status": status}
             if last_reasoning:
                 payload["reasoning"] = last_reasoning
             if status_note:
