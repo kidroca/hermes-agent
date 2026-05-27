@@ -1325,7 +1325,32 @@ def _sync_session_key_after_compress(
             pass
 
 
-def _get_usage(agent) -> dict:
+def _estimated_context_tokens(agent, messages: list | None = None) -> int:
+    """Best-effort context token estimate for runtimes that do not report usage.
+
+    Codex app-server currently returns no token accounting, which used to leave
+    the TUI status bar stuck at ``0/<ctx>`` even though the model context was
+    obviously non-empty. Use the same rough estimator the compressor uses so the
+    footer remains informative instead of confidently useless.
+    """
+    if not messages:
+        return 0
+    try:
+        from agent.model_metadata import estimate_messages_tokens_rough
+
+        estimate_messages = list(messages)
+        system_prompt = getattr(agent, "_cached_system_prompt", "") or ""
+        if system_prompt:
+            estimate_messages = [
+                {"role": "system", "content": system_prompt},
+                *estimate_messages,
+            ]
+        return int(estimate_messages_tokens_rough(estimate_messages) or 0)
+    except Exception:
+        return 0
+
+
+def _get_usage(agent, messages: list | None = None) -> dict:
     g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
     usage = {
         "model": getattr(agent, "model", "") or "",
@@ -1342,6 +1367,8 @@ def _get_usage(agent) -> dict:
     comp = getattr(agent, "context_compressor", None)
     if comp:
         ctx_used = getattr(comp, "last_prompt_tokens", 0) or usage["total"] or 0
+        if not ctx_used:
+            ctx_used = _estimated_context_tokens(agent, messages)
         ctx_max = getattr(comp, "context_length", 0) or 0
         if ctx_max:
             usage["context_used"] = ctx_used
@@ -1368,6 +1395,13 @@ def _get_usage(agent) -> dict:
     except Exception:
         pass
     return usage
+
+
+def _session_history_for_usage(session: dict | None) -> list:
+    try:
+        return list((session or {}).get("history", []))
+    except Exception:
+        return []
 
 
 def _probe_credentials(agent) -> str:
@@ -2735,7 +2769,7 @@ def _(rid, params: dict) -> dict:
     return _ok(
         rid,
         (
-            _get_usage(agent)
+            _get_usage(agent, _session_history_for_usage(session))
             if agent is not None
             else {"calls": 0, "input": 0, "output": 0, "total": 0}
         ),
@@ -2775,7 +2809,7 @@ def _(rid, params: dict) -> dict:
             updated = _dt(meta.get(field), created)
             break
 
-    usage = _get_usage(agent) if agent is not None else {}
+    usage = _get_usage(agent, _session_history_for_usage(session)) if agent is not None else {}
     provider = getattr(agent, "provider", None) or "unknown"
     model = getattr(agent, "model", None) or "(unknown)"
     lines = [
@@ -3665,7 +3699,9 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                 raw = str(result)
                 status = "complete"
 
-            payload = {"text": raw, "usage": _get_usage(agent), "status": status}
+            result_messages = result.get("messages") if isinstance(result, dict) else None
+            usage_messages = result_messages if isinstance(result_messages, list) else _session_history_for_usage(session)
+            payload = {"text": raw, "usage": _get_usage(agent, usage_messages), "status": status}
             if last_reasoning:
                 payload["reasoning"] = last_reasoning
             if status_note:
