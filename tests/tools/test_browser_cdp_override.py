@@ -1,4 +1,14 @@
+import pytest
 from unittest.mock import Mock, patch
+
+
+@pytest.fixture(autouse=True)
+def clear_cdp_resolution_cache():
+    import tools.browser_tool as browser_tool
+
+    browser_tool._cached_cdp_resolutions.clear()
+    yield
+    browser_tool._cached_cdp_resolutions.clear()
 
 
 HOST = "example-host"
@@ -45,6 +55,25 @@ class TestResolveCdpOverride:
 
         with patch("tools.browser_tool.requests.get", side_effect=RuntimeError("boom")):
             assert _resolve_cdp_override(HTTP_URL) == HTTP_URL
+
+    def test_returns_empty_when_discovery_fails_without_raw_fallback(self):
+        from tools.browser_tool import _resolve_cdp_override
+
+        with patch("tools.browser_tool.requests.get", side_effect=RuntimeError("boom")):
+            assert _resolve_cdp_override(HTTP_URL, fallback_to_raw=False) == ""
+
+    def test_uses_short_timeout_for_explicit_startup_probe(self):
+        from tools.browser_tool import _resolve_cdp_override
+
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"webSocketDebuggerUrl": WS_URL}
+
+        with patch("tools.browser_tool.requests.get", return_value=response) as mock_get:
+            resolved = _resolve_cdp_override(HTTP_URL, timeout=0.5, fallback_to_raw=False)
+
+        assert resolved == WS_URL
+        mock_get.assert_called_once_with(VERSION_URL, timeout=0.5)
 
     def test_normalizes_provider_returned_http_cdp_url_when_creating_session(self, monkeypatch):
         import tools.browser_tool as browser_tool

@@ -550,7 +550,11 @@ def _browser_cdp_check() -> bool:
         return False
     if not check_browser_requirements():
         return False
-    return bool(_get_cdp_override())
+    # Startup/tool-definition discovery must not spend 10 seconds per CDP-gated
+    # tool when Peter's shared Windows Edge debug port is not currently running.
+    # A short, cached reachability check keeps browser_cdp/dialog hidden until
+    # CDP is live without turning every profile boot into a timeout storm.
+    return bool(_get_cdp_override(timeout=0.1, fallback_to_raw=False))
 
 
 registry.register(

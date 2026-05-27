@@ -231,7 +231,12 @@ def _get_extraction_model() -> Optional[str]:
     return os.getenv("AUXILIARY_WEB_EXTRACT_MODEL", "").strip() or None
 
 
-def _resolve_cdp_override(cdp_url: str) -> str:
+def _resolve_cdp_override(
+    cdp_url: str,
+    *,
+    timeout: float = 10.0,
+    fallback_to_raw: bool = True,
+) -> str:
     """Normalize a user-supplied CDP endpoint into a concrete connectable URL.
 
     Accepts:
@@ -242,6 +247,10 @@ def _resolve_cdp_override(cdp_url: str) -> str:
     For discovery-style endpoints we fetch /json/version and return the
     webSocketDebuggerUrl so downstream tools always receive a concrete browser
     websocket instead of an ambiguous host:port URL.
+
+    ``fallback_to_raw=False`` is for startup/tool-availability checks: a dead
+    configured CDP URL should not be treated as reachable, and it definitely
+    should not burn repeated 10s network probes during profile boot.
     """
     raw = (cdp_url or "").strip()
     if not raw:
@@ -250,6 +259,11 @@ def _resolve_cdp_override(cdp_url: str) -> str:
     lowered = raw.lower()
     if "/devtools/browser/" in lowered:
         return raw
+
+    timeout = max(0.1, float(timeout or 10.0))
+    cache_key = (raw, timeout, fallback_to_raw)
+    if cache_key in _cached_cdp_resolutions:
+        return _cached_cdp_resolutions[cache_key]
 
     discovery_url = raw
     if lowered.startswith(("ws://", "wss://")):
@@ -264,23 +278,48 @@ def _resolve_cdp_override(cdp_url: str) -> str:
         version_url = discovery_url.rstrip("/") + "/json/version"
 
     try:
-        response = requests.get(version_url, timeout=10)
+        response = requests.get(version_url, timeout=timeout)
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
-        logger.warning("Failed to resolve CDP endpoint %s via %s: %s", raw, version_url, exc)
-        return raw
+        log = logger.warning if fallback_to_raw else logger.debug
+        log("Failed to resolve CDP endpoint %s via %s: %s", raw, version_url, exc)
+        resolved = raw if fallback_to_raw else ""
+        _cached_cdp_resolutions[cache_key] = resolved
+        return resolved
 
     ws_url = str(payload.get("webSocketDebuggerUrl") or "").strip()
     if ws_url:
         logger.info("Resolved CDP endpoint %s -> %s", raw, ws_url)
+        _cached_cdp_resolutions[cache_key] = ws_url
         return ws_url
 
     logger.warning("CDP discovery at %s did not return webSocketDebuggerUrl; using raw endpoint", version_url)
-    return raw
+    resolved = raw if fallback_to_raw else ""
+    _cached_cdp_resolutions[cache_key] = resolved
+    return resolved
 
 
-def _get_cdp_override() -> str:
+def _get_raw_cdp_override() -> str:
+    """Return the configured CDP URL without probing the network."""
+    env_override = os.environ.get("BROWSER_CDP_URL", "").strip()
+    if env_override:
+        return env_override
+
+    try:
+        from hermes_cli.config import read_raw_config
+
+        cfg = read_raw_config()
+        browser_cfg = cfg.get("browser", {})
+        if isinstance(browser_cfg, dict):
+            return str(browser_cfg.get("cdp_url", "") or "").strip()
+    except Exception as e:
+        logger.debug("Could not read browser.cdp_url from config: %s", e)
+
+    return ""
+
+
+def _get_cdp_override(*, timeout: float = 10.0, fallback_to_raw: bool = True) -> str:
     """Return a normalized CDP URL override, or empty string.
 
     Precedence is:
@@ -291,21 +330,11 @@ def _get_cdp_override() -> str:
     launcher and connect directly to the supplied Chrome DevTools Protocol
     endpoint.
     """
-    env_override = os.environ.get("BROWSER_CDP_URL", "").strip()
-    if env_override:
-        return _resolve_cdp_override(env_override)
-
-    try:
-        from hermes_cli.config import read_raw_config
-
-        cfg = read_raw_config()
-        browser_cfg = cfg.get("browser", {})
-        if isinstance(browser_cfg, dict):
-            return _resolve_cdp_override(str(browser_cfg.get("cdp_url", "") or ""))
-    except Exception as e:
-        logger.debug("Could not read browser.cdp_url from config: %s", e)
-
-    return ""
+    return _resolve_cdp_override(
+        _get_raw_cdp_override(),
+        timeout=timeout,
+        fallback_to_raw=fallback_to_raw,
+    )
 
 
 def _get_dialog_policy_config() -> Tuple[str, float]:
@@ -435,6 +464,7 @@ _allow_private_urls_resolved = False
 _cached_allow_private_urls: Optional[bool] = None
 _cached_agent_browser: Optional[str] = None
 _agent_browser_resolved = False
+_cached_cdp_resolutions: Dict[Tuple[str, float, bool], str] = {}
 
 # Lightpanda engine support — cached like _get_cloud_provider().
 # agent-browser v0.25.3+ supports ``--engine lightpanda`` natively.
@@ -3615,8 +3645,10 @@ def check_browser_requirements() -> bool:
         return True
 
     # CDP override mode can connect to an existing remote/local browser endpoint
-    # without requiring the local agent-browser binary on PATH.
-    if _get_cdp_override():
+    # without requiring the local agent-browser binary on PATH. This must be a
+    # config-only check: profile startup calls requirement checks during tool
+    # discovery, and probing a dead Windows CDP port here blocks boot.
+    if _get_raw_cdp_override():
         return True
 
     # The agent-browser CLI is required for local launch and cloud-provider flows.
