@@ -701,6 +701,34 @@ class TestSendToPlatformChunking:
             thread_ts=None,
         )
 
+    def test_slack_thread_id_is_passed_to_standalone_sender(self, monkeypatch):
+        """Slack sends through the plugin registry must preserve thread targets."""
+        _ensure_slack_mock(monkeypatch)
+
+        import plugins.platforms.slack.adapter as slack_mod
+
+        monkeypatch.setattr(slack_mod, "SLACK_AVAILABLE", True)
+        send = _make_recording_slack_sender()
+
+        with _patch_slack_standalone_sender(send):
+            result = asyncio.run(
+                _send_to_platform(
+                    Platform.SLACK,
+                    SimpleNamespace(enabled=True, token="***", extra={}),
+                    "C123",
+                    "thread reply",
+                    thread_id="1712345678.901234",
+                )
+            )
+
+        assert result["success"] is True
+        send.assert_awaited_once_with(
+            "***",
+            "C123",
+            "thread reply",
+            thread_ts="1712345678.901234",
+        )
+
     def test_slack_bold_italic_formatted_before_send(self, monkeypatch):
         """Bold+italic ***text*** survives tool-layer formatting."""
         _ensure_slack_mock(monkeypatch)

@@ -952,7 +952,8 @@ async def _send_to_platform(platform, pconfig, chat_id, message, thread_id=None,
         if platform == Platform.SLACK:
             # Slack migrated to a bundled plugin (#41112); delivery flows
             # through the registry's standalone_sender_fn, which applies
-            # mrkdwn formatting and posts via the Slack Web API.
+            # mrkdwn formatting, preserves thread_id, and posts via the Slack
+            # Web API.
             from gateway.platform_registry import platform_registry
             _slack_entry = platform_registry.get("slack")
             if _slack_entry is None or _slack_entry.standalone_sender_fn is None:
