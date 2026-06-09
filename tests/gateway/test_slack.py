@@ -1160,6 +1160,42 @@ class TestBangPrefixCommands:
         assert msg_event.text.startswith("/model gpt-5.4")
         assert msg_event.message_type == MessageType.COMMAND
 
+    @staticmethod
+    def _rich_text_blocks(text):
+        return [
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": text}],
+                    }
+                ],
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_bang_command_rich_text_blocks_do_not_duplicate_args(self, adapter):
+        """Slack rich_text blocks mirror ``text`` and must not become args."""
+        evt = self._make_event("!model gpt-5.4")
+        evt["blocks"] = self._rich_text_blocks("!model gpt-5.4")
+        await adapter._handle_slack_message(evt)
+
+        msg_event = adapter.handle_message.call_args[0][0]
+        assert msg_event.text == "/model gpt-5.4"
+        assert msg_event.message_type == MessageType.COMMAND
+
+    @pytest.mark.asyncio
+    async def test_bare_bang_model_rich_text_blocks_stays_picker_command(self, adapter):
+        """Bare ``!model`` must not switch to model name ``!model``."""
+        evt = self._make_event("!model")
+        evt["blocks"] = self._rich_text_blocks("!model")
+        await adapter._handle_slack_message(evt)
+
+        msg_event = adapter.handle_message.call_args[0][0]
+        assert msg_event.text == "/model"
+        assert msg_event.message_type == MessageType.COMMAND
+
     @pytest.mark.asyncio
     async def test_bang_works_inside_thread(self, adapter):
         """The whole point: ``!stop`` inside a thread reply dispatches."""

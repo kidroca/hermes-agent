@@ -207,6 +207,33 @@ def _extract_text_from_slack_blocks(blocks: list) -> str:
     return "\n".join(parts)
 
 
+def _normalize_slack_bang_command(text: str) -> str:
+    """Rewrite a leading Slack ``!command`` alias to ``/command`` when known.
+
+    Slack blocks native slash commands inside threads ("/queue is not
+    supported in threads. Sorry!").  As a workaround, recognise a leading
+    ``!`` as an alternate command prefix and rewrite it to ``/`` so the rest
+    of the pipeline (MessageType.COMMAND tagging, gateway dispatcher) handles
+    it like a normal slash command.  Only rewrite when the first token resolves
+    to a known gateway command so casual messages like "!nice work" pass
+    through unchanged.
+    """
+    if not text.startswith("!"):
+        return text
+    try:
+        from hermes_cli.commands import is_gateway_known_command
+
+        first_token = text[1:].split(maxsplit=1)[0]
+        # Strip "@suffix" the same way get_command() does, so forms like
+        # ``!stop@hermes`` still resolve.
+        cmd_name = first_token.split("@", 1)[0].lower()
+        if cmd_name and "/" not in cmd_name and is_gateway_known_command(cmd_name):
+            return "/" + text[1:]
+    except Exception:  # pragma: no cover - defensive
+        pass
+    return text
+
+
 def _serialize_slack_blocks_for_agent(blocks: list, max_chars: int = 6000) -> str:
     """Return a compact, redacted JSON view of the current message's Block Kit payload."""
     if not blocks:
@@ -2620,31 +2647,6 @@ class SlackAdapter(BasePlatformAdapter):
             return
 
         original_text = event.get("text", "")
-
-        # Slack blocks native slash commands inside threads ("/queue is not
-        # supported in threads. Sorry!").  As a workaround, recognise a
-        # leading ``!`` as an alternate command prefix and rewrite it to
-        # ``/`` so the rest of the pipeline (MessageType.COMMAND tagging,
-        # gateway dispatcher) handles it like a normal slash command.  Only
-        # rewrite when the first token resolves to a known gateway command
-        # so casual messages like "!nice work" pass through unchanged.
-        if original_text.startswith("!"):
-            try:
-                from hermes_cli.commands import is_gateway_known_command
-
-                first_token = original_text[1:].split(maxsplit=1)[0]
-                # Strip "@suffix" the same way get_command() does, so
-                # forms like ``!stop@hermes`` still resolve.
-                cmd_name = first_token.split("@", 1)[0].lower()
-                if (
-                    cmd_name
-                    and "/" not in cmd_name
-                    and is_gateway_known_command(cmd_name)
-                ):
-                    original_text = "/" + original_text[1:]
-            except Exception:  # pragma: no cover - defensive
-                pass
-
         text = original_text
 
         # Extract quoted/forwarded content from Slack blocks.
@@ -2670,6 +2672,12 @@ class SlackAdapter(BasePlatformAdapter):
             blocks_payload = _serialize_slack_blocks_for_agent(blocks)
             if blocks_payload:
                 text = (text.strip() + "\n\n" + blocks_payload).strip()
+
+        # Normalize Slack thread-friendly bang commands after block text has
+        # been merged/deduped.  Slack rich_text blocks mirror the raw ``text``
+        # field; rewriting ``!model`` before the block merge makes the block
+        # copy look different and appends it as command arguments.
+        text = _normalize_slack_bang_command(text)
 
         # Extract link unfurls / rich attachments (e.g. Notion previews).
         # Slack places unfurled link previews in the ``attachments`` array with
@@ -2899,9 +2907,9 @@ class SlackAdapter(BasePlatformAdapter):
             if thread_context:
                 text = thread_context + text
 
-        # Determine message type
+        # Determine message type after any Slack bang-command normalization.
         msg_type = MessageType.TEXT
-        if (original_text or "").startswith("/"):
+        if (text or "").startswith("/"):
             msg_type = MessageType.COMMAND
 
         # Handle file attachments
