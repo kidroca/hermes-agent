@@ -9816,6 +9816,45 @@ def _memory_pressure_level(sample: Optional[Mapping[str, Any]] = None) -> str:
         return "unknown"
 
 
+def _profile_denies_kanban_invocation(assignee: Optional[str]) -> bool:
+    if not assignee:
+        return False
+    try:
+        from hermes_cli.profiles import profile_invocation_denied
+
+        return profile_invocation_denied(assignee, "kanban")
+    except Exception:
+        return False
+
+
+def _block_kanban_invocation_denied(
+    conn: sqlite3.Connection,
+    task_id: str,
+    assignee: Optional[str],
+    *,
+    dry_run: bool = False,
+) -> str:
+    profile = assignee or "<unassigned>"
+    reason = f"protected profile {profile!r} denies kanban invocation"
+    if dry_run:
+        return reason
+    now = int(time.time())
+    with write_txn(conn):
+        conn.execute(
+            "UPDATE tasks SET status = 'blocked', claim_lock = NULL, "
+            "claim_expires = NULL, worker_pid = NULL, last_failure_error = ? "
+            "WHERE id = ? AND status IN ('ready', 'review')",
+            (reason[:500], task_id),
+        )
+        conn.execute(
+            "INSERT INTO task_comments (task_id, author, body, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (task_id, "kanban-dispatcher", reason, now),
+        )
+        _append_event(conn, task_id, "spawn_denied", {"reason": reason})
+    return reason
+
+
 def dispatch_once(
     conn: sqlite3.Connection,
     *,
@@ -10192,6 +10231,13 @@ def _dispatch_once_locked(
             # of human-pulled work.
             result.skipped_nonspawnable.append(row["id"])
             continue
+        if _profile_denies_kanban_invocation(row_assignee):
+            _block_kanban_invocation_denied(
+                conn, row["id"], row_assignee, dry_run=dry_run
+            )
+            result.skipped_nonspawnable.append(row["id"])
+            continue
+
         # Per-profile concurrency cap (#21582): even if there's global
         # headroom, refuse to spawn for an assignee that's already at
         # its in-flight cap. Prevents one profile's local model / API
@@ -10338,6 +10384,12 @@ def _dispatch_once_locked(
         except Exception:
             profile_exists = None  # type: ignore[assignment]
         if profile_exists is not None and not profile_exists(row["assignee"]):
+            result.skipped_nonspawnable.append(row["id"])
+            continue
+        if _profile_denies_kanban_invocation(row["assignee"]):
+            _block_kanban_invocation_denied(
+                conn, row["id"], row["assignee"], dry_run=dry_run
+            )
             result.skipped_nonspawnable.append(row["id"])
             continue
         if _per_profile_cap is not None:

@@ -506,6 +506,36 @@ def test_delete_task_removes_task_and_cascades(kanban_home):
 
 
 # ---------------------------------------------------------------------------
+def test_dispatch_blocks_profile_with_kanban_invocation_denied(kanban_home, monkeypatch):
+    """Dispatcher refuses a ready task when its target profile opts out."""
+    from hermes_cli import profiles
+
+    monkeypatch.setattr(profiles, "profile_exists", lambda name: name == "maintenance")
+    monkeypatch.setattr(
+        profiles,
+        "profile_invocation_denied",
+        lambda name, kind: name == "maintenance" and kind == "kanban",
+        raising=False,
+    )
+    spawns = []
+
+    with kb.connect() as conn:
+        task_id = kb.create_task(conn, title="protected", assignee="maintenance")
+        result = kb.dispatch_once(
+            conn,
+            spawn_fn=lambda task, workspace: spawns.append(task.id),
+        )
+        task = kb.get_task(conn, task_id)
+        events = [event.kind for event in kb.list_events(conn, task_id)]
+
+    assert spawns == []
+    assert result.skipped_nonspawnable == [task_id]
+    assert task is not None
+    assert task.status == "blocked"
+    assert "protected profile" in (task.last_failure_error or "")
+    assert "spawn_denied" in events
+
+
 # Respawn guard (check_respawn_guard + dispatch_once integration)
 # ---------------------------------------------------------------------------
 

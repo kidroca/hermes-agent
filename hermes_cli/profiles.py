@@ -450,6 +450,46 @@ def list_profile_names() -> List[str]:
     return names
 
 
+def profile_invocation_denied(name: Optional[str], kind: str) -> bool:
+    """Return True when a profile config refuses a control-plane invocation.
+
+    Used by kanban at spawn time. This is intentionally target-side and
+    config-file based: direct DB writes and future creator tools still hit this
+    check immediately before work runs.
+    """
+    invocation = str(kind or "").strip().lower()
+    if invocation != "kanban":
+        return False
+
+    if not name or not str(name).strip():
+        return False
+    try:
+        home = get_profile_dir(normalize_profile_name(str(name))).resolve()
+    except Exception:
+        return False
+
+    config_path = home / "config.yaml"
+    if not config_path.is_file():
+        return False
+    try:
+        # This is an explicit target-profile probe, not a read of the active
+        # profile. Using load_config() here would inspect the wrong HERMES_HOME.
+        from hermes_cli.config import read_user_config_raw
+
+        data = read_user_config_raw(config_path)
+    except Exception:
+        return False
+    if not isinstance(data, dict):
+        return False
+    security = data.get("profile_security") or {}
+    if not isinstance(security, dict):
+        return False
+    value = security.get("deny_kanban_invocation", False)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 # ---------------------------------------------------------------------------
 # Alias / wrapper script management
 # ---------------------------------------------------------------------------

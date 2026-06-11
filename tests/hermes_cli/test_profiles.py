@@ -107,6 +107,48 @@ class TestGetProfileDir:
         assert result == tmp_path / ".hermes"
 
 
+class TestProfileInvocationDenied:
+    """Profile invocation guard is opt-in and target-side."""
+
+    def test_missing_config_allows_kanban(self, profile_env):
+        create_profile("worker", no_alias=True)
+
+        assert profiles.profile_invocation_denied("worker", "kanban") is False
+
+    def test_missing_security_block_allows_kanban(self, profile_env):
+        profile_dir = create_profile("worker", no_alias=True)
+        (profile_dir / "config.yaml").write_text("model:\n  provider: test\n", encoding="utf-8")
+
+        assert profiles.profile_invocation_denied("worker", "kanban") is False
+
+    def test_false_deny_flag_allows_kanban(self, profile_env):
+        profile_dir = create_profile("worker", no_alias=True)
+        (profile_dir / "config.yaml").write_text(
+            "profile_security:\n  deny_kanban_invocation: false\n",
+            encoding="utf-8",
+        )
+
+        assert profiles.profile_invocation_denied("worker", "kanban") is False
+
+    def test_true_deny_flag_blocks_kanban(self, profile_env):
+        profile_dir = create_profile("worker", no_alias=True)
+        (profile_dir / "config.yaml").write_text(
+            "profile_security:\n  deny_kanban_invocation: true\n",
+            encoding="utf-8",
+        )
+
+        assert profiles.profile_invocation_denied("worker", "kanban") is True
+
+    def test_non_kanban_invocations_always_allow(self, profile_env):
+        profile_dir = create_profile("worker", no_alias=True)
+        (profile_dir / "config.yaml").write_text(
+            "profile_security:\n  deny_kanban_invocation: true\n",
+            encoding="utf-8",
+        )
+
+        assert profiles.profile_invocation_denied("worker", "cron") is False
+
+
 # ===================================================================
 # TestCreateProfile
 # ===================================================================
