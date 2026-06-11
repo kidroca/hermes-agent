@@ -1709,6 +1709,38 @@ def test_has_spawnable_ready_false_on_empty_queue(kanban_home):
         assert kb.has_spawnable_ready(conn) is False
 
 
+
+
+def test_dispatch_blocks_profile_with_kanban_invocation_denied(kanban_home, monkeypatch):
+    """A real profile can opt out of dispatcher invocation at target side.
+
+    This is stronger than creation-time validation: even if a ready task is
+    already in the DB for that assignee, dispatch_once must refuse before
+    claim/spawn and leave an auditable blocked task.
+    """
+    from hermes_cli import profiles
+
+    monkeypatch.setattr(profiles, "profile_exists", lambda name: name == "maintenance")
+    monkeypatch.setattr(
+        profiles,
+        "profile_invocation_denied",
+        lambda name, kind: (name == "maintenance" and kind == "kanban"),
+        raising=False,
+    )
+    spawns = []
+
+    with kb.connect() as conn:
+        t = kb.create_task(conn, title="protected", assignee="maintenance")
+        res = kb.dispatch_once(conn, spawn_fn=lambda task, workspace: spawns.append(task.id))
+        task = kb.get_task(conn, t)
+        events = [e.kind for e in kb.list_events(conn, t)]
+
+    assert spawns == []
+    assert res.skipped_nonspawnable == [t]
+    assert task.status == "blocked"
+    assert "protected profile" in (task.last_failure_error or "")
+    assert "spawn_denied" in events
+
 def test_dispatch_promotes_ready_and_spawns(kanban_home, all_assignees_spawnable):
     spawns = []
 
