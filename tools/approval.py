@@ -1792,11 +1792,11 @@ def is_approval_bypass_active() -> bool:
 
 
 def _get_approval_timeout() -> int:
-    """Read the approval timeout from config. Defaults to 60 seconds."""
+    """Read the approval timeout from config. Defaults to 240 seconds."""
     try:
-        return int(_get_approval_config().get("timeout", 60))
+        return int(_get_approval_config().get("timeout", 240))
     except (ValueError, TypeError):
-        return 60
+        return 240
 
 
 def _get_cron_approval_mode() -> str:

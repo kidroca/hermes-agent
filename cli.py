@@ -3706,6 +3706,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         self.resume_display = CLI_CONFIG["display"].get("resume_display", "full")
         # bell_on_complete: play terminal bell (\a) when agent finishes a response
         self.bell_on_complete = CLI_CONFIG["display"].get("bell_on_complete", False)
+        # bell_on_prompt: play terminal bell (\a) when a blocking human prompt appears
+        self.bell_on_prompt = CLI_CONFIG["display"].get("bell_on_prompt", False)
         # show_reasoning: display model thinking/reasoning before the response
         self.show_reasoning = CLI_CONFIG["display"].get("show_reasoning", False)
         # reasoning_full: when reasoning display is on, print the post-response
@@ -11483,6 +11485,13 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             "Use your best judgement to make the choice and proceed."
         )
 
+    def _ring_prompt_bell(self) -> None:
+        """Ring the terminal bell when a blocking human prompt appears."""
+        if not getattr(self, "bell_on_prompt", False):
+            return
+        sys.stdout.write("\a")
+        sys.stdout.flush()
+
     def _sudo_password_callback(self) -> str:
         """
         Prompt for sudo password through the prompt_toolkit UI.
@@ -11501,6 +11510,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             "response_queue": response_queue,
         }
         self._sudo_deadline = _time.monotonic() + timeout
+        self._ring_prompt_bell()
 
         # Modal prompt — paint immediately, bypassing the throttle/resize guard
         # so the prompt can't be dropped and time out unseen (#41098).
@@ -11549,7 +11559,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         import time as _time
 
         with self._approval_lock:
-            timeout = int(CLI_CONFIG.get("approvals", {}).get("timeout", 60))
+            timeout = int(CLI_CONFIG.get("approvals", {}).get("timeout", 240))
             response_queue = queue.Queue()
 
             self._approval_state = {
@@ -11560,6 +11570,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 "response_queue": response_queue,
             }
             self._approval_deadline = _time.monotonic() + timeout
+            self._ring_prompt_bell()
 
             # Modal prompt — paint immediately, bypassing the throttle/resize
             # guard. A throttled paint here can be silently dropped (250ms

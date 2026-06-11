@@ -644,7 +644,8 @@ def _browser_cdp_check() -> bool:
     """
     try:
         from tools.browser_tool import (  # type: ignore[import-not-found]
-            _get_cdp_override,
+            _get_raw_cdp_override,
+            _resolve_cdp_override,
             check_browser_requirements,
         )
     except ImportError as exc:  # pragma: no cover — defensive
@@ -652,7 +653,13 @@ def _browser_cdp_check() -> bool:
         return False
     if not check_browser_requirements():
         return False
-    return bool(_get_cdp_override())
+    # Startup/tool-definition discovery must never call _get_cdp_override():
+    # that path may lazy-launch Peter's shared Edge CDP browser.  Tool gating
+    # only needs a quick reachability check against the already-configured URL.
+    raw = _get_raw_cdp_override()
+    if not raw:
+        return False
+    return bool(_resolve_cdp_override(raw, timeout=0.1, fallback_to_raw=False))
 
 
 registry.register(

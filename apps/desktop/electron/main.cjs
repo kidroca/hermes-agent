@@ -5911,8 +5911,8 @@ function createWindow() {
     // inside the same band. On Windows/Linux, titleBarOverlay tells Electron
     // to paint native min/max/close in the top-right of the renderer; on
     // macOS it just reserves a content inset alongside the traffic lights.
-    titleBarStyle: 'hidden',
-    titleBarOverlay: getTitleBarOverlayOptions(),
+    titleBarStyle: IS_WSL ? 'default' : 'hidden',
+    titleBarOverlay: IS_WSL ? undefined : getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
     vibrancy: IS_MAC ? 'sidebar' : undefined,
     opacity: windowOpacity(),
@@ -5936,7 +5936,7 @@ function createWindow() {
     }
   }
 
-  if (!IS_MAC) {
+  if (!IS_MAC && !IS_WSL) {
     if (!nativeThemeListenerInstalled) {
       nativeThemeListenerInstalled = true
       nativeTheme.on('updated', () => {
@@ -6027,6 +6027,11 @@ function createWindow() {
     broadcastBootProgress()
     sendWindowStateChanged()
     startHermes().catch(error => rememberLog(error.stack || error.message))
+    setImmediate(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      mainWindow.show()
+      mainWindow.focus()
+    })
   })
 }
 
@@ -6646,6 +6651,7 @@ ipcMain.handle('hermes:watchPreviewFile', (_event, url) => watchPreviewFile(Stri
 ipcMain.handle('hermes:stopPreviewFileWatch', (_event, id) => stopPreviewFileWatch(String(id || '')))
 
 ipcMain.on('hermes:titlebar-theme', (_event, payload) => {
+  if (IS_WSL) return
   if (!payload || !isHexColor(payload.background) || !isHexColor(payload.foreground)) {
     return
   }

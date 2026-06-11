@@ -497,7 +497,12 @@ def test_check_fn_false_when_no_cdp_url(monkeypatch):
     import tools.browser_tool as bt
 
     monkeypatch.setattr(bt, "check_browser_requirements", lambda: True)
-    monkeypatch.setattr(bt, "_get_cdp_override", lambda: "")
+    monkeypatch.setattr(bt, "_get_raw_cdp_override", lambda: "")
+    monkeypatch.setattr(
+        bt,
+        "_resolve_cdp_override",
+        lambda *args, **kwargs: pytest.fail("should not resolve without a raw URL"),
+    )
     assert browser_cdp_tool._browser_cdp_check() is False
 
 
@@ -506,9 +511,14 @@ def test_check_fn_true_when_cdp_url_set(monkeypatch):
     import tools.browser_tool as bt
 
     monkeypatch.setattr(bt, "check_browser_requirements", lambda: True)
-    monkeypatch.setattr(
-        bt, "_get_cdp_override", lambda: "ws://localhost:9222/devtools/browser/x"
-    )
+    monkeypatch.setattr(bt, "_get_raw_cdp_override", lambda: "http://localhost:9222")
+
+    def fake_resolve(raw, **kwargs):
+        assert raw == "http://localhost:9222"
+        assert kwargs == {"timeout": 0.1, "fallback_to_raw": False}
+        return "ws://localhost:9222/devtools/browser/x"
+
+    monkeypatch.setattr(bt, "_resolve_cdp_override", fake_resolve)
     assert browser_cdp_tool._browser_cdp_check() is True
 
 
@@ -518,7 +528,28 @@ def test_check_fn_false_when_browser_requirements_fail(monkeypatch):
     import tools.browser_tool as bt
 
     monkeypatch.setattr(bt, "check_browser_requirements", lambda: False)
+    monkeypatch.setattr(bt, "_get_raw_cdp_override", lambda: "http://localhost:9222")
     monkeypatch.setattr(
-        bt, "_get_cdp_override", lambda: "ws://localhost:9222/devtools/browser/x"
+        bt,
+        "_resolve_cdp_override",
+        lambda *args, **kwargs: pytest.fail("should not resolve when requirements fail"),
     )
+    assert browser_cdp_tool._browser_cdp_check() is False
+
+
+def test_check_fn_does_not_lazy_launch_cdp_browser(monkeypatch):
+    """Tool discovery must not call _get_cdp_override, because that path can
+    auto-launch the configured CDP browser."""
+    import tools.browser_tool as bt
+
+    monkeypatch.setattr(bt, "check_browser_requirements", lambda: True)
+    monkeypatch.setattr(bt, "_get_raw_cdp_override", lambda: "http://localhost:9222")
+    monkeypatch.setattr(
+        bt,
+        "_get_cdp_override",
+        lambda **kwargs: pytest.fail("_browser_cdp_check must not lazy-launch CDP"),
+        raising=False,
+    )
+    monkeypatch.setattr(bt, "_resolve_cdp_override", lambda raw, **kwargs: "")
+
     assert browser_cdp_tool._browser_cdp_check() is False
