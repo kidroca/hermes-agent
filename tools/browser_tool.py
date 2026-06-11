@@ -57,6 +57,7 @@ import logging
 import os
 import signal
 import re
+import shlex
 import subprocess
 import shutil
 import sys
@@ -496,7 +497,12 @@ def _get_vision_model() -> Optional[str]:
     return os.getenv("AUXILIARY_VISION_MODEL", "").strip() or None
 
 
-def _resolve_cdp_override(cdp_url: str) -> str:
+def _resolve_cdp_override(
+    cdp_url: str,
+    *,
+    timeout: float = 10.0,
+    fallback_to_raw: bool = True,
+) -> str:
     """Normalize a user-supplied CDP endpoint into a concrete connectable URL.
 
     Accepts:
@@ -507,6 +513,11 @@ def _resolve_cdp_override(cdp_url: str) -> str:
     For discovery-style endpoints we fetch /json/version and return the
     webSocketDebuggerUrl so downstream tools always receive a concrete browser
     websocket instead of an ambiguous host:port URL.
+
+    ``fallback_to_raw=False`` is for reachability probes on real browser-use
+    paths: a dead configured endpoint should return empty instead of being
+    treated as connectable. Startup and tool-availability checks must use
+    :func:`_get_cdp_override_raw` directly and perform no network I/O.
     """
     raw = (cdp_url or "").strip()
     if not raw:
@@ -515,6 +526,11 @@ def _resolve_cdp_override(cdp_url: str) -> str:
     lowered = raw.lower()
     if "/devtools/browser/" in lowered:
         return raw
+
+    timeout = max(0.1, float(timeout or 10.0))
+    cache_key = (raw, timeout, fallback_to_raw)
+    if cache_key in _cached_cdp_resolutions:
+        return _cached_cdp_resolutions[cache_key]
 
     discovery_url = raw
     if lowered.startswith(("ws://", "wss://")):
@@ -531,17 +547,20 @@ def _resolve_cdp_override(cdp_url: str) -> str:
     try:
         import requests  # lazy — shared module object, test patches still apply
 
-        response = requests.get(version_url, timeout=10)
+        response = requests.get(version_url, timeout=timeout)
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
-        logger.warning(
+        log = logger.warning if fallback_to_raw else logger.debug
+        log(
             "Failed to resolve CDP endpoint %s via %s: %s",
             _sanitize_url_for_logs(raw),
             _sanitize_url_for_logs(version_url),
             _sanitize_url_for_logs(exc),
         )
-        return raw
+        resolved = raw if fallback_to_raw else ""
+        _cached_cdp_resolutions[cache_key] = resolved
+        return resolved
 
     ws_url = str(payload.get("webSocketDebuggerUrl") or "").strip()
     if ws_url:
@@ -550,13 +569,30 @@ def _resolve_cdp_override(cdp_url: str) -> str:
             _sanitize_url_for_logs(raw),
             _sanitize_url_for_logs(ws_url),
         )
+        _cached_cdp_resolutions[cache_key] = ws_url
         return ws_url
 
     logger.warning(
         "CDP discovery at %s did not return webSocketDebuggerUrl; using raw endpoint",
         _sanitize_url_for_logs(version_url),
     )
-    return raw
+    resolved = raw if fallback_to_raw else ""
+    _cached_cdp_resolutions[cache_key] = resolved
+    return resolved
+
+
+def _read_browser_config() -> Dict[str, Any]:
+    """Return the raw browser config block without probing or launching."""
+    try:
+        from hermes_cli.config import read_raw_config
+
+        cfg = read_raw_config()
+        browser_cfg = cfg.get("browser", {}) if isinstance(cfg, dict) else {}
+        if isinstance(browser_cfg, dict):
+            return browser_cfg
+    except Exception as e:
+        logger.debug("Could not read browser config: %s", e)
+    return {}
 
 
 def _get_cdp_override_raw() -> str:
@@ -585,20 +621,72 @@ def _get_cdp_override_raw() -> str:
     if env_override:
         return env_override
 
+    browser_cfg = _read_browser_config()
+    return str(
+        browser_cfg.get("cdp_url", "")
+        or browser_cfg.get("cdp_endpoint", "")
+        or ""
+    ).strip()
+
+
+def _get_cdp_launch_command() -> Union[str, List[str]]:
+    """Return the optional on-demand CDP launch command from env/config."""
+    env_cmd = os.environ.get("BROWSER_CDP_LAUNCH_COMMAND", "").strip()
+    if env_cmd:
+        return env_cmd
+    return _read_browser_config().get("cdp_launch_command") or ""
+
+
+def _cdp_auto_launch_enabled() -> bool:
+    """Whether Hermes may launch a configured CDP browser on first use."""
+    env_value = os.environ.get("BROWSER_CDP_AUTO_LAUNCH")
+    if env_value is not None:
+        return is_truthy_value(env_value)
+    return is_truthy_value(_read_browser_config().get("cdp_auto_launch", False))
+
+
+def _run_cdp_launch_command(
+    command: Union[str, List[str]], *, timeout: float = 15.0
+) -> bool:
+    """Run a configured CDP launch command once without invoking a shell."""
+    if not command:
+        return False
+    if isinstance(command, (list, tuple)):
+        argv = [str(part) for part in command if str(part)]
+    else:
+        try:
+            argv = shlex.split(str(command))
+        except ValueError as exc:
+            logger.warning("Invalid browser.cdp_launch_command %r: %s", command, exc)
+            return False
+    if not argv:
+        return False
     try:
-        from hermes_cli.config import read_raw_config
+        logger.info("Launching configured CDP browser: %s", argv)
+        proc = subprocess.run(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=max(1.0, float(timeout or 15.0)),
+            check=False,
+        )
+    except Exception as exc:
+        logger.warning("Failed to run CDP launch command %r: %s", argv, exc)
+        return False
+    if proc.returncode != 0:
+        logger.warning(
+            "CDP launch command exited %s; stdout=%r stderr=%r",
+            proc.returncode,
+            (proc.stdout or "")[-500:],
+            (proc.stderr or "")[-500:],
+        )
+        return False
+    logger.info("CDP launch command completed: %s", (proc.stdout or "").strip())
+    return True
 
-        cfg = read_raw_config()
-        browser_cfg = cfg.get("browser", {})
-        if isinstance(browser_cfg, dict):
-            return str(browser_cfg.get("cdp_url", "") or "").strip()
-    except Exception as e:
-        logger.debug("Could not read browser.cdp_url from config: %s", e)
 
-    return ""
-
-
-def _get_cdp_override() -> str:
+def _get_cdp_override(*, timeout: float = 10.0, fallback_to_raw: bool = True) -> str:
     """Return a normalized CDP URL override, or empty string.
 
     Precedence is:
@@ -617,7 +705,24 @@ def _get_cdp_override() -> str:
     raw = _get_cdp_override_raw()
     if not raw:
         return ""
-    return _resolve_cdp_override(raw)
+
+    launch_command = _get_cdp_launch_command()
+    if launch_command and _cdp_auto_launch_enabled():
+        resolved = _resolve_cdp_override(
+            raw,
+            timeout=min(float(timeout or 10.0), 1.0),
+            fallback_to_raw=False,
+        )
+        if resolved:
+            return resolved
+        _run_cdp_launch_command(launch_command)
+        _cached_cdp_resolutions.clear()
+
+    return _resolve_cdp_override(
+        raw,
+        timeout=timeout,
+        fallback_to_raw=fallback_to_raw,
+    )
 
 
 def _get_dialog_policy_config() -> Tuple[str, float]:
@@ -752,6 +857,7 @@ _allow_private_urls_resolved = False
 _cached_allow_private_urls: Optional[bool] = None
 _cached_agent_browser: Optional[str] = None
 _agent_browser_resolved = False
+_cached_cdp_resolutions: Dict[Tuple[str, float, bool], str] = {}
 
 # Lightpanda engine support — cached like _get_cloud_provider().
 # agent-browser v0.25.3+ supports ``--engine lightpanda`` natively.

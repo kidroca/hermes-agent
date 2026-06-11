@@ -26,6 +26,7 @@ def _make_cli_stub():
     cli._sudo_state = None
     cli._sudo_deadline = 0
     cli._modal_input_snapshot = None
+    cli.bell_on_prompt = False
     cli._invalidate = MagicMock()
     cli._app = SimpleNamespace(invalidate=MagicMock(), current_buffer=_FakeBuffer())
     return cli
@@ -125,6 +126,54 @@ class TestCliApprovalUi:
         thread.join(timeout=2)
         assert result["value"] == "once"
 
+
+    def test_approval_callback_rings_bell_when_prompt_appears(self):
+        cli = _make_cli_stub()
+        cli.bell_on_prompt = True
+        result = {}
+
+        def _run_callback():
+            result["value"] = cli._approval_callback("rm -rf /tmp/example", "danger")
+
+        with patch("sys.stdout.write") as write:
+            thread = threading.Thread(target=_run_callback, daemon=True)
+            thread.start()
+
+            deadline = time.time() + 2
+            while cli._approval_state is None and time.time() < deadline:
+                time.sleep(0.01)
+
+            assert cli._approval_state is not None
+            assert write.call_args_list[0].args[0] == "\a"
+
+            cli._approval_state["response_queue"].put("deny")
+            thread.join(timeout=2)
+
+        assert result["value"] == "deny"
+
+    def test_sudo_prompt_rings_bell_when_prompt_appears(self):
+        cli = _make_cli_stub()
+        cli.bell_on_prompt = True
+        result = {}
+
+        def _run_callback():
+            result["value"] = cli._sudo_password_callback()
+
+        with patch("sys.stdout.write") as write, patch.object(cli_module, "_cprint"):
+            thread = threading.Thread(target=_run_callback, daemon=True)
+            thread.start()
+
+            deadline = time.time() + 2
+            while cli._sudo_state is None and time.time() < deadline:
+                time.sleep(0.01)
+
+            assert cli._sudo_state is not None
+            assert write.call_args_list[0].args[0] == "\a"
+
+            cli._sudo_state["response_queue"].put("")
+            thread.join(timeout=2)
+
+        assert result["value"] == ""
 
     def test_sudo_prompt_restores_existing_draft_after_response(self):
         cli = _make_cli_stub()
