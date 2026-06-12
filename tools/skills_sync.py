@@ -26,6 +26,8 @@ import json
 import logging
 import os
 import shutil
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from hermes_constants import get_bundled_skills_dir, get_hermes_home, get_optional_skills_dir
@@ -39,6 +41,7 @@ logger = logging.getLogger(__name__)
 HERMES_HOME = get_hermes_home()
 SKILLS_DIR = HERMES_HOME / "skills"
 MANIFEST_FILE = SKILLS_DIR / ".bundled_manifest"
+BASES_DIR = SKILLS_DIR / ".bundled_bases"
 
 # Marker file written by `hermes profile create --no-skills` (named profiles)
 # and by the installer's `--no-skills` flag (the default ~/.hermes profile).
@@ -232,6 +235,106 @@ def _skill_file_list(skill_dir: Path) -> List[str]:
         if fpath.is_file():
             files.append(fpath.relative_to(skill_dir).as_posix())
     return files
+
+
+def _base_dir_for_skill(skill_name: str) -> Path:
+    """Return the stored upstream base snapshot path for a bundled skill."""
+    return BASES_DIR / skill_name
+
+
+def _write_base_snapshot(skill_name: str, source: Path) -> None:
+    """Replace the per-skill base snapshot with *source* (best effort)."""
+    base = _base_dir_for_skill(skill_name)
+    tmp = base.with_name(f".{base.name}.tmp")
+    try:
+        if tmp.exists():
+            _rmtree_writable(tmp)
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source, tmp)
+        if base.exists():
+            _rmtree_writable(base)
+        atomic_replace(tmp, base)
+    except Exception as e:
+        logger.debug("Failed to write bundled skill base snapshot %s: %s", base, e, exc_info=True)
+        try:
+            if tmp.exists():
+                _rmtree_writable(tmp)
+        except OSError:
+            pass
+
+
+def _merge_file_with_git(base: Path, local: Path, upstream: Path, dest: Path) -> bool:
+    """Three-way merge one text file via git merge-file; return False on conflict."""
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        ours = work / "local"
+        ancestor = work / "base"
+        theirs = work / "upstream"
+        shutil.copy2(local, ours)
+        shutil.copy2(base, ancestor)
+        shutil.copy2(upstream, theirs)
+        proc = subprocess.run(
+            ["git", "merge-file", "-p", str(ours), str(ancestor), str(theirs)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return False
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(proc.stdout)
+        return True
+
+
+def _try_merge_skill_directory(base: Path, local: Path, upstream: Path) -> Tuple[bool, Path | None, List[str]]:
+    """Attempt a minimal directory-level three-way merge without touching local."""
+    if not base.exists() or not local.exists() or not upstream.exists():
+        return False, None, ["missing base/local/upstream tree"]
+
+    merged_root = Path(tempfile.mkdtemp(prefix="hermes-skill-merge-"))
+    conflicts: List[str] = []
+    rels = set(_skill_file_list(base)) | set(_skill_file_list(local)) | set(_skill_file_list(upstream))
+
+    for rel in sorted(rels):
+        b, l, u = base / rel, local / rel, upstream / rel
+        out = merged_root / rel
+        b_exists, l_exists, u_exists = b.exists(), l.exists(), u.exists()
+        try:
+            if l_exists and u_exists and b_exists:
+                if l.read_bytes() == u.read_bytes():
+                    out.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(l, out)
+                elif l.read_bytes() == b.read_bytes():
+                    out.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(u, out)
+                elif u.read_bytes() == b.read_bytes():
+                    out.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(l, out)
+                elif not _merge_file_with_git(b, l, u, out):
+                    conflicts.append(rel)
+            elif not b_exists:
+                if l_exists and not u_exists:
+                    out.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(l, out)
+                elif u_exists and not l_exists:
+                    out.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(u, out)
+                elif l.read_bytes() == u.read_bytes():
+                    out.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(l, out)
+                else:
+                    conflicts.append(rel)
+            elif not l_exists and not u_exists:
+                continue
+            elif not l_exists:
+                if u.read_bytes() != b.read_bytes():
+                    conflicts.append(rel)
+            elif not u_exists:
+                if l.read_bytes() != b.read_bytes():
+                    conflicts.append(rel)
+            else:
+                conflicts.append(rel)
+        except OSError:
+            conflicts.append(rel)
+
+    if conflicts:
+        _rmtree_writable(merged_root)
+        return False, None, conflicts
+    return True, merged_root, []
 
 
 def _content_hash(directory: Path) -> str:
@@ -468,16 +571,16 @@ def sync_skills(quiet: bool = False) -> dict:
         if not quiet:
             print("  (skipped — profile opted out of bundled skills via .no-bundled-skills)")
         return {
-            "copied": [], "updated": [], "skipped": 0,
-            "user_modified": [], "cleaned": [], "total_bundled": 0,
+            "copied": [], "updated": [], "merged": [], "skipped": 0,
+            "user_modified": [], "merge_conflicts": {}, "cleaned": [], "total_bundled": 0,
             "optional_provenance_backfilled": [], "skipped_opt_out": True,
         }
 
     bundled_dir = _get_bundled_dir()
     if not bundled_dir.exists():
         return {
-            "copied": [], "updated": [], "skipped": 0,
-            "user_modified": [], "cleaned": [], "suppressed": [], "total_bundled": 0,
+            "copied": [], "updated": [], "merged": [], "skipped": 0,
+            "user_modified": [], "merge_conflicts": {}, "cleaned": [], "suppressed": [], "total_bundled": 0,
             "optional_provenance_backfilled": [],
         }
 
@@ -490,6 +593,8 @@ def sync_skills(quiet: bool = False) -> dict:
     copied = []
     updated = []
     user_modified = []
+    merged = []
+    merge_conflicts: Dict[str, List[str]] = {}
     suppressed_skipped: List[str] = []
     skipped = 0
 
@@ -534,6 +639,7 @@ def sync_skills(quiet: bool = False) -> dict:
                     shutil.copytree(skill_src, dest)
                     copied.append(skill_name)
                     manifest[skill_name] = bundled_hash
+                    _write_base_snapshot(skill_name, skill_src)
                     if not quiet:
                         print(f"  + {skill_name}")
             except (OSError, IOError) as e:
@@ -558,10 +664,47 @@ def sync_skills(quiet: bool = False) -> dict:
                 continue
 
             if user_hash != origin_hash:
-                # User modified this skill — don't overwrite their changes
-                user_modified.append(skill_name)
-                if not quiet:
-                    print(f"  ~ {skill_name} (user-modified, skipping)")
+                # User modified this skill. If upstream also changed and we have
+                # the old bundled base snapshot, try a conservative three-way
+                # merge; otherwise keep the historical skip behavior.
+                if bundled_hash != origin_hash:
+                    ok, merged_tree, conflicts = _try_merge_skill_directory(
+                        _base_dir_for_skill(skill_name), dest, skill_src
+                    )
+                    if ok and merged_tree is not None:
+                        try:
+                            backup = dest.with_suffix(".bak")
+                            shutil.move(str(dest), str(backup))
+                            try:
+                                shutil.move(str(merged_tree), str(dest))
+                                manifest[skill_name] = bundled_hash
+                                _write_base_snapshot(skill_name, skill_src)
+                                merged.append(skill_name)
+                                if not quiet:
+                                    print(f"  ↯ {skill_name} (merged local changes with upstream)")
+                                try:
+                                    _rmtree_writable(backup)
+                                except (OSError, IOError):
+                                    logger.debug("Could not remove backup %s", backup, exc_info=True)
+                            except (OSError, IOError):
+                                if backup.exists() and not dest.exists():
+                                    shutil.move(str(backup), str(dest))
+                                raise
+                        except (OSError, IOError) as e:
+                            user_modified.append(skill_name)
+                            if not quiet:
+                                print(f"  ! Failed to merge {skill_name}: {e}")
+                    else:
+                        merge_conflicts[skill_name] = conflicts
+                        user_modified.append(skill_name)
+                        if not quiet:
+                            shown = ", ".join(conflicts[:3])
+                            more = f", +{len(conflicts) - 3} more" if len(conflicts) > 3 else ""
+                            print(f"  ~ {skill_name} (merge conflicts: {shown}{more}; kept local copy)")
+                else:
+                    user_modified.append(skill_name)
+                    if not quiet:
+                        print(f"  ~ {skill_name} (user-modified, skipping)")
                 continue
 
             # User copy matches origin — check if bundled has a newer version
@@ -573,6 +716,7 @@ def sync_skills(quiet: bool = False) -> dict:
                     try:
                         shutil.copytree(skill_src, dest)
                         manifest[skill_name] = bundled_hash
+                        _write_base_snapshot(skill_name, skill_src)
                         updated.append(skill_name)
                         if not quiet:
                             print(f"  ↑ {skill_name} (updated)")
@@ -590,6 +734,7 @@ def sync_skills(quiet: bool = False) -> dict:
                     if not quiet:
                         print(f"  ! Failed to update {skill_name}: {e}")
             else:
+                _write_base_snapshot(skill_name, skill_src)
                 skipped += 1  # bundled unchanged, user unchanged
 
         else:
@@ -618,8 +763,10 @@ def sync_skills(quiet: bool = False) -> dict:
     return {
         "copied": copied,
         "updated": updated,
+        "merged": merged,
         "skipped": skipped,
         "user_modified": user_modified,
+        "merge_conflicts": merge_conflicts,
         "cleaned": cleaned,
         "suppressed": suppressed_skipped,
         "total_bundled": len(bundled_skills),
