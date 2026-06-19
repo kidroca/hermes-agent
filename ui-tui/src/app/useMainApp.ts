@@ -187,6 +187,7 @@ export function useMainApp(gw: GatewayClient) {
   const [lastTurnEndedAt, setLastTurnEndedAt] = useState<null | number>(null)
   const [goodVibesTick, setGoodVibesTick] = useState(0)
   const [bellOnComplete, setBellOnComplete] = useState(false)
+  const [bellOnPrompt, setBellOnPrompt] = useState(false)
 
   const ui = useStore($uiState)
   const overlay = useStore($overlayState)
@@ -524,7 +525,7 @@ export function useMainApp(gw: GatewayClient) {
     }
   }, [ui.busy, turnStartedAt])
 
-  useConfigSync({ gw, setBellOnComplete, setVoiceEnabled, setVoiceRecordKey, sid: ui.sid })
+  useConfigSync({ gw, setBellOnComplete, setBellOnPrompt, setVoiceEnabled, setVoiceRecordKey, sid: ui.sid })
 
   useEffect(() => {
     if (!ui.sid) {
@@ -760,7 +761,7 @@ export function useMainApp(gw: GatewayClient) {
           setCatalog
         },
         submission: { submitRef },
-        system: { bellOnComplete, stdout, sys },
+        system: { bellOnComplete, bellOnPrompt, stdout, sys },
         transcript: { appendMessage, panel, setHistoryItems },
         voice: {
           setProcessing: setVoiceProcessing,
@@ -772,6 +773,7 @@ export function useMainApp(gw: GatewayClient) {
     [
       appendMessage,
       bellOnComplete,
+      bellOnPrompt,
       composerActions.setInput,
       gateway,
       panel,

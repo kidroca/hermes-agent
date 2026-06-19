@@ -934,6 +934,17 @@ describe('createGatewayEventHandler', () => {
     expect(getOverlayState().approval).toMatchObject({ allowPermanent: true })
   })
 
+  it('rings the prompt bell for approval requests when enabled', () => {
+    const ctx = buildCtx([])
+    const stdout = { isTTY: true, write: vi.fn() }
+    ctx.system = { ...ctx.system, bellOnPrompt: true, stdout }
+    const onEvent = createGatewayEventHandler(ctx)
+
+    onEvent({ payload: { command: 'rm -rf /tmp/x', description: 'dangerous command' }, type: 'approval.request' } as any)
+
+    expect(stdout.write).toHaveBeenCalledWith('\x07')
+  })
+
   it('preserves allow_permanent=false on approval overlays (tirith warning)', () => {
     const onEvent = createGatewayEventHandler(buildCtx([]))
 

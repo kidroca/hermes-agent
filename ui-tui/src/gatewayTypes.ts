@@ -153,6 +153,7 @@ export type CommandDispatchResponse =
 
 export interface ConfigDisplayConfig {
   bell_on_complete?: boolean
+  bell_on_prompt?: boolean
   busy_input_mode?: string
   details_mode?: string
   inline_diffs?: boolean

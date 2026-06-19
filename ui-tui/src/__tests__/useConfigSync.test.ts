@@ -15,14 +15,16 @@ describe('applyDisplay', () => {
     resetUiState()
   })
 
-  it('fans every display flag out to $uiState and the bell callback', () => {
+  it('fans every display flag out to $uiState and the bell callbacks', () => {
     const setBell = vi.fn()
+    const setPromptBell = vi.fn()
 
     applyDisplay(
       {
         config: {
           display: {
             bell_on_complete: true,
+            bell_on_prompt: true,
             details_mode: 'expanded',
             inline_diffs: false,
             show_reasoning: true,
@@ -32,11 +34,14 @@ describe('applyDisplay', () => {
           }
         }
       },
-      setBell
+      setBell,
+      undefined,
+      setPromptBell
     )
 
     const s = $uiState.get()
     expect(setBell).toHaveBeenCalledWith(true)
+    expect(setPromptBell).toHaveBeenCalledWith(true)
     expect(s.compact).toBe(true)
     expect(s.detailsMode).toBe('expanded')
     expect(s.inlineDiffs).toBe(false)

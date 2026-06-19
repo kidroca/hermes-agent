@@ -81,7 +81,7 @@ const normalizeSubagentStatus = (status: unknown, fallback: SubagentStatus): Sub
 export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev: GatewayEvent) => void {
   const { rpc } = ctx.gateway
   const { STARTUP_RESUME_ID, newSession, recoverSidRef, resumeById, setCatalog } = ctx.session
-  const { bellOnComplete, stdout, sys } = ctx.system
+  const { bellOnComplete, bellOnPrompt = false, stdout, sys } = ctx.system
   const { appendMessage, panel, setHistoryItems } = ctx.transcript
   const { setInput } = ctx.composer
   const { submitRef } = ctx.submission
@@ -780,6 +780,7 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
         patchOverlayState({
           approval: { allowPermanent, command: String(ev.payload.command ?? ''), description }
         })
+        if (bellOnPrompt && stdout?.isTTY) stdout.write('\x07')
         setStatus('approval needed')
 
         return
@@ -787,6 +788,7 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
 
       case 'sudo.request':
         patchOverlayState({ sudo: { requestId: ev.payload.request_id } })
+        if (bellOnPrompt && stdout?.isTTY) stdout.write('\x07')
         setStatus('sudo password needed')
 
         return
