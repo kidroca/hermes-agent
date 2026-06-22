@@ -1204,6 +1204,8 @@ DEFAULT_CONFIG = {
         "auto_local_for_private_urls": True,  # When a cloud provider is set, auto-spawn local Chromium for LAN/localhost URLs instead of sending them to the cloud
         "cdp_url": "",  # Optional persistent CDP endpoint for attaching to an existing Chromium/Chrome
         "allow_unsafe_evaluate": False,  # Allow browser_console(expression=...) to use sensitive JS primitives (cookies/storage/clipboard/network/form values)
+        "cdp_auto_launch": False,  # If True, run cdp_launch_command lazily when cdp_url is configured but unreachable
+        "cdp_launch_command": "",  # Optional argv/string command that starts the configured CDP browser endpoint
         # CDP supervisor — dialog + frame detection via a persistent WebSocket.
         # Active only when a CDP-capable backend is attached (Browserbase or
         # local Chrome via /browser connect). See
