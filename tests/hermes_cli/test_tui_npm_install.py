@@ -59,6 +59,61 @@ def test_need_install_when_required_package_missing_from_hidden_lock(tmp_path: P
     assert main_mod._tui_need_npm_install(tmp_path) is True
 
 
+def test_workspace_scoped_tui_install_ignores_unrelated_workspace_entries(
+    tmp_path: Path, main_mod
+) -> None:
+    """`npm install --workspace ui-tui` need not install desktop/bootstrap deps."""
+    ui = tmp_path / "ui-tui"
+    ui.mkdir()
+    (ui / "package.json").write_text("{}")
+    _touch_ink(tmp_path)
+    (tmp_path / "package-lock.json").write_text(
+        '{"packages":{'
+        '"ui-tui":{"version":"0.0.1","dependencies":{"foo":"1.0.0"}},'
+        '"node_modules/@hermes/ink":{"resolved":"ui-tui/packages/hermes-ink","link":true},'
+        '"ui-tui/packages/hermes-ink":{"name":"@hermes/ink","version":"0.0.1"},'
+        '"node_modules/foo":{"version":"1.0.0"},'
+        '"apps/bootstrap-installer":{"version":"0.0.1"},'
+        '"apps/desktop":{"version":"0.0.1"},'
+        '"apps/desktop/node_modules/electron":{"version":"1.0.0"}'
+        '}}'
+    )
+    (tmp_path / "node_modules" / ".package-lock.json").write_text(
+        '{"packages":{'
+        '"ui-tui":{"version":"0.0.1","dependencies":{"foo":"1.0.0"}},'
+        '"node_modules/@hermes/ink":{"resolved":"ui-tui/packages/hermes-ink","link":true},'
+        '"ui-tui/packages/hermes-ink":{"name":"@hermes/ink","version":"0.0.1"},'
+        '"node_modules/foo":{"version":"1.0.0"}'
+        '}}'
+    )
+    assert main_mod._tui_need_npm_install(ui) is False
+
+
+def test_workspace_scoped_tui_install_still_requires_tui_dependencies(
+    tmp_path: Path, main_mod
+) -> None:
+    ui = tmp_path / "ui-tui"
+    ui.mkdir()
+    (ui / "package.json").write_text("{}")
+    _touch_ink(tmp_path)
+    (tmp_path / "package-lock.json").write_text(
+        '{"packages":{'
+        '"ui-tui":{"version":"0.0.1","dependencies":{"foo":"1.0.0"}},'
+        '"node_modules/@hermes/ink":{"resolved":"ui-tui/packages/hermes-ink","link":true},'
+        '"ui-tui/packages/hermes-ink":{"name":"@hermes/ink","version":"0.0.1"},'
+        '"node_modules/foo":{"version":"1.0.0"}'
+        '}}'
+    )
+    (tmp_path / "node_modules" / ".package-lock.json").write_text(
+        '{"packages":{'
+        '"ui-tui":{"version":"0.0.1","dependencies":{"foo":"1.0.0"}},'
+        '"node_modules/@hermes/ink":{"resolved":"ui-tui/packages/hermes-ink","link":true},'
+        '"ui-tui/packages/hermes-ink":{"name":"@hermes/ink","version":"0.0.1"}'
+        '}}'
+    )
+    assert main_mod._tui_need_npm_install(ui) is True
+
+
 def test_no_install_when_only_optional_peer_package_missing_from_hidden_lock(tmp_path: Path, main_mod) -> None:
     _touch_ink(tmp_path)
     (tmp_path / "package-lock.json").write_text(
@@ -249,6 +304,7 @@ def test_make_tui_argv_keeps_desktop_workspace_install_behaviour(
     monkeypatch.delenv("TERMUX_VERSION", raising=False)
     monkeypatch.setenv("PREFIX", "/usr")
     monkeypatch.setattr(main_mod, "_tui_need_npm_install", lambda _root: True)
+    monkeypatch.setattr(main_mod, "_tui_need_rebuild", lambda _root: True)
     monkeypatch.setattr(main_mod.shutil, "which", lambda name: f"/bin/{name}")
     calls = []
 
@@ -275,7 +331,7 @@ def test_make_tui_argv_keeps_desktop_workspace_install_behaviour(
     _assert_utf8_replace_capture(calls[1][1])
 
 
-def test_make_tui_argv_keeps_desktop_always_build_behaviour(
+def test_make_tui_argv_skips_build_when_desktop_bundle_is_fresh(
     tmp_path: Path, main_mod, monkeypatch
 ) -> None:
     _touch_tui_entry(tmp_path)
@@ -294,9 +350,7 @@ def test_make_tui_argv_keeps_desktop_always_build_behaviour(
 
     main_mod._make_tui_argv(tmp_path, tui_dev=False)
 
-    assert calls
-    assert calls[0][0][0] == ["/bin/npm", "run", "build"]
-    _assert_utf8_replace_capture(calls[0][1])
+    assert calls == []
 
 
 def test_make_tui_argv_decodes_dev_prebuild_with_utf8_replace(
@@ -512,7 +566,7 @@ def test_tui_launch_install_uses_workspace_scope(
     (tmp_path / "package-lock.json").write_text("{}")
 
     monkeypatch.setattr(main_mod, "_tui_need_npm_install", lambda _root: True)
-    monkeypatch.setattr(main_mod, "_tui_need_rebuild", lambda _root: False)
+    monkeypatch.setattr(main_mod, "_tui_need_rebuild", lambda _root: True)
     monkeypatch.setattr(main_mod.shutil, "which", lambda name: f"/usr/bin/{name}")
 
     npm_calls = []
@@ -551,6 +605,7 @@ def test_make_tui_argv_omits_workspace_when_tui_has_own_lockfile(
     monkeypatch.delenv("TERMUX_VERSION", raising=False)
     monkeypatch.setenv("PREFIX", "/usr")
     monkeypatch.setattr(main_mod, "_tui_need_npm_install", lambda _root: True)
+    monkeypatch.setattr(main_mod, "_tui_need_rebuild", lambda _root: True)
     monkeypatch.setattr(main_mod.shutil, "which", lambda name: f"/bin/{name}")
     calls = []
 

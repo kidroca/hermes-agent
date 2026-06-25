@@ -1445,6 +1445,90 @@ def _termux_workspace_install_context(
     return ws_root, tuple(workspace_args)
 
 
+def _npm_lock_package_name(path: str, pkg: dict) -> str | None:
+    """Best-effort package name for a ``package-lock.json`` package entry."""
+    name = pkg.get("name")
+    if isinstance(name, str) and name:
+        return name
+
+    parts = path.split("/")
+    if "node_modules" not in parts:
+        return None
+    idx = len(parts) - 1 - parts[::-1].index("node_modules")
+    if idx + 1 >= len(parts):
+        return None
+    first = parts[idx + 1]
+    if first.startswith("@") and idx + 2 < len(parts):
+        return f"{first}/{parts[idx + 2]}"
+    return first
+
+
+def _tui_relevant_lock_packages(wanted: dict) -> set[str]:
+    """Return package-lock paths relevant to the ``ui-tui`` workspace.
+
+    The monorepo lockfile also contains desktop/web/bootstrap workspaces. The
+    TUI launcher intentionally runs ``npm install --workspace ui-tui`` to avoid
+    resolving those expensive unrelated workspaces on the hot path; freshness
+    checks must therefore compare only the ui-tui dependency closure, not the
+    entire root lockfile.
+    """
+    name_to_paths: dict[str, set[str]] = {}
+    for path, pkg in wanted.items():
+        if not isinstance(pkg, dict):
+            continue
+        name = _npm_lock_package_name(path, pkg)
+        if name:
+            name_to_paths.setdefault(name, set()).add(path)
+
+    relevant: set[str] = set()
+    queue: list[str] = []
+
+    def add(path: str | None) -> None:
+        if path and path in wanted and path not in relevant:
+            relevant.add(path)
+            queue.append(path)
+
+    add("ui-tui")
+    add("ui-tui/packages/hermes-ink")
+
+    for path, pkg in wanted.items():
+        if not isinstance(pkg, dict):
+            continue
+        resolved = pkg.get("resolved")
+        if resolved in {"ui-tui", "ui-tui/packages/hermes-ink"}:
+            add(path)
+
+    dep_fields = (
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies",
+    )
+    while queue:
+        path = queue.pop(0)
+        pkg = wanted.get(path)
+        if not isinstance(pkg, dict):
+            continue
+
+        resolved = pkg.get("resolved")
+        if isinstance(resolved, str):
+            add(resolved)
+
+        for field in dep_fields:
+            deps = pkg.get(field)
+            if not isinstance(deps, dict):
+                continue
+            for dep_name in deps:
+                root_dep = f"node_modules/{dep_name}"
+                if root_dep in wanted:
+                    add(root_dep)
+                for dep_path in name_to_paths.get(dep_name, ()):
+                    if "node_modules" not in dep_path:
+                        add(dep_path)
+
+    return relevant
+
+
 def _tui_need_npm_install(root: Path) -> bool:
     """True when @hermes/ink is missing or node_modules is behind package-lock.json.
 
@@ -1506,8 +1590,15 @@ def _tui_need_npm_install(root: Path) -> bool:
     def comparable(pkg: dict) -> dict:
         return {k: v for k, v in pkg.items() if k not in _NPM_LOCK_RUNTIME_KEYS}
 
+    wanted_paths: set[str] | None = None
+    if ws_root != root and root.name == "ui-tui":
+        wanted_paths = _tui_relevant_lock_packages(wanted)
+
     for name, pkg in wanted.items():
         if not name:
+            continue
+
+        if wanted_paths is not None and name not in wanted_paths:
             continue
 
         if not isinstance(pkg, dict):
@@ -1773,15 +1864,10 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
     #    dependencies into the hot path.
     did_install = False
     termux_startup = _is_termux_startup_environment()
-    termux_need_rebuild = False
-    if termux_startup and not tui_dev:
-        termux_need_rebuild = _tui_need_rebuild(tui_dir)
+    need_rebuild = False if tui_dev else _tui_need_rebuild(tui_dir)
 
-    skip_install_for_fresh_termux_bundle = (
-        termux_startup and not tui_dev and not termux_need_rebuild
-    )
     if (
-        not skip_install_for_fresh_termux_bundle
+        (tui_dev or need_rebuild)
         and _tui_need_npm_install(tui_dir)
     ):
         npm = _node_bin("npm")
@@ -1856,12 +1942,9 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             return [str(tsx), "src/entry.tsx"], tui_dir
         return [npm, "start"], tui_dir
 
-    # Desktop/dev launches retain the historical "always rebuild" behaviour.
-    # Termux cold starts use the freshness check because esbuild startup is
-    # expensive on old mobile CPUs.
-    should_build = True
-    if termux_startup:
-        should_build = did_install or termux_need_rebuild
+    # The normal TUI bundle is self-contained. Rebuild only after an install or
+    # when source/config inputs are newer than dist/entry.js.
+    should_build = did_install or need_rebuild
 
     if should_build:
         npm = _node_bin("npm")
