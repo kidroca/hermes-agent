@@ -2663,22 +2663,16 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
     if not ext_dir:
         _ensure_tui_workspace(tui_dir)
 
-    # 2. Normal flow: npm install if needed, always esbuild, then node dist/entry.js.
+    # 2. Normal flow: install/build only when the bundle is stale, then run it.
     #    --dev flow: npm install if needed, then tsx src/entry.tsx.
     #    Existing desktop behaviour runs npm from the workspace root.  Termux
     #    scopes the install to ui-tui so launch does not pull desktop/web
     #    dependencies into the hot path.
     did_install = False
     termux_startup = _is_termux_startup_environment()
-    termux_need_rebuild = False
-    if termux_startup and not tui_dev:
-        termux_need_rebuild = _tui_need_rebuild(tui_dir)
-
-    skip_install_for_fresh_termux_bundle = (
-        termux_startup and not tui_dev and not termux_need_rebuild
-    )
+    need_rebuild = False if tui_dev else _tui_need_rebuild(tui_dir)
     if (
-        not skip_install_for_fresh_termux_bundle
+        (tui_dev or need_rebuild)
         and _tui_need_npm_install(tui_dir)
     ):
         npm = _node_bin("npm")
@@ -2783,12 +2777,9 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             return [str(tsx), "src/entry.tsx"], tui_dir
         return [npm, "start"], tui_dir
 
-    # Desktop/dev launches retain the historical "always rebuild" behaviour.
-    # Termux cold starts use the freshness check because esbuild startup is
-    # expensive on old mobile CPUs.
-    should_build = True
-    if termux_startup:
-        should_build = did_install or termux_need_rebuild
+    # The normal TUI bundle is self-contained. Rebuild only after an install or
+    # when source/config inputs are newer than dist/entry.js.
+    should_build = did_install or need_rebuild
 
     if should_build:
         npm = _node_bin("npm")
