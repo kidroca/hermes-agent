@@ -4267,6 +4267,53 @@ def _ensure_session_db_row(session: dict) -> bool:
     return True
 
 
+def _reattach_session_db_if_available(session: dict) -> bool:
+    """Give an already-built TUI agent a SessionDB after transient init failure.
+
+    TUI builds agents optimistically before the first prompt. If SQLite is
+    briefly locked at that moment, ``AIAgent`` is constructed with
+    ``_session_db=None``. ``prompt.submit`` may later create the session row once
+    SQLite recovers, but the live agent would still never flush messages. Rebind
+    the DB just before a turn so persistence can recover without restarting.
+    """
+    agent = session.get("agent")
+    if agent is None or getattr(agent, "_session_db", None) is not None:
+        return False
+
+    db = None
+    owns_db = False
+    profile_home = session.get("profile_home")
+    if profile_home:
+        try:
+            from hermes_state import SessionDB
+
+            db = SessionDB(db_path=Path(profile_home) / "state.db")
+            owns_db = True
+        except Exception:
+            logger.debug("failed to reattach profile session db", exc_info=True)
+            return False
+    else:
+        db = _get_db()
+
+    if db is None:
+        return False
+    try:
+        agent._session_db = db
+        if owns_db and not _transfer_db_to_agent(agent, db):
+            agent._session_db = None
+            with contextlib.suppress(Exception):
+                db.close()
+            return False
+        logger.info(
+            "Reattached SessionDB to TUI agent after transient unavailability: session=%s",
+            session.get("session_key") or getattr(agent, "session_id", ""),
+        )
+        return True
+    except Exception:
+        logger.debug("failed to assign reattached session db", exc_info=True)
+        return False
+
+
 def _persist_branch_seed(session: dict) -> None:
     """First-turn persist of a branch's copied transcript.
 
@@ -13364,6 +13411,7 @@ def _run_prompt_submit(
             # the turn runs. No-op for every other session shape.
             _sync_bot_capabilities(sid, session)
             agent = session["agent"]
+            _reattach_session_db_if_available(session)
             # Snapshot after turn-start model sync. A deferred switch mutates
             # history and its version; that mutation belongs to this turn.
             with session["history_lock"]:
