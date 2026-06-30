@@ -1623,6 +1623,46 @@ def _ensure_session_db_row(session: dict) -> None:
                 pass
 
 
+def _reattach_session_db_if_available(session: dict) -> bool:
+    """Give an already-built TUI agent a SessionDB after transient init failure.
+
+    TUI builds agents optimistically before the first prompt. If SQLite is
+    briefly locked at that moment, ``AIAgent`` is constructed with
+    ``_session_db=None``. ``prompt.submit`` may later create the session row once
+    SQLite recovers, but the live agent would still never flush messages. Rebind
+    the DB just before a turn so persistence can recover without restarting.
+    """
+    agent = session.get("agent")
+    if agent is None or getattr(agent, "_session_db", None) is not None:
+        return False
+
+    db = None
+    profile_home = session.get("profile_home")
+    if profile_home:
+        try:
+            from hermes_state import SessionDB
+
+            db = SessionDB(db_path=Path(profile_home) / "state.db")
+        except Exception:
+            logger.debug("failed to reattach profile session db", exc_info=True)
+            return False
+    else:
+        db = _get_db()
+
+    if db is None:
+        return False
+    try:
+        agent._session_db = db
+        logger.info(
+            "Reattached SessionDB to TUI agent after transient unavailability: session=%s",
+            session.get("session_key") or getattr(agent, "session_id", ""),
+        )
+        return True
+    except Exception:
+        logger.debug("failed to assign reattached session db", exc_info=True)
+        return False
+
+
 def _persist_branch_seed(session: dict) -> None:
     """First-turn persist of a branch's copied transcript.
 
@@ -8542,6 +8582,7 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
             # re-running is a harmless no-op.)
             _wire_callbacks(sid)
             _sync_agent_model_with_config(sid, session)
+            _reattach_session_db_if_available(session)
             cwd = _session_cwd(session)
             _register_session_cwd(session)
             cols = session.get("cols", 80)

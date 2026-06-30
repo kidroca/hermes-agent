@@ -88,6 +88,23 @@ def test_session_context_uses_session_cwd(monkeypatch, tmp_path):
         server._sessions.pop(sid, None)
 
 
+def test_reattach_session_db_after_transient_startup_failure(monkeypatch):
+    """A TUI agent built while state.db was locked must recover persistence later."""
+    agent = types.SimpleNamespace(_session_db=None, session_id="stored-session")
+    fake_db = object()
+
+    monkeypatch.setattr(server, "_get_db", lambda: fake_db)
+
+    session = {"agent": agent, "session_key": "stored-session"}
+    assert server._reattach_session_db_if_available(session) is True
+    assert agent._session_db is fake_db
+
+    # Once attached, do not replace the long-lived handle on every turn.
+    monkeypatch.setattr(server, "_get_db", lambda: object())
+    assert server._reattach_session_db_if_available(session) is False
+    assert agent._session_db is fake_db
+
+
 def test_handoff_fail_marks_only_inflight_rows(monkeypatch):
     class DbContext:
         def __init__(self, db):
