@@ -1218,7 +1218,8 @@ def _start_agent_build(sid: str, session: dict) -> None:
                     from hermes_state import SessionDB
 
                     session_db = SessionDB(db_path=Path(profile_home) / "state.db")
-                except Exception:
+                except Exception as exc:
+                    current["_session_db_error"] = str(exc)
                     session_db = None
             try:
                 # Lazy-resumed (watch) sessions carry the stored conversation
@@ -1643,7 +1644,8 @@ def _reattach_session_db_if_available(session: dict) -> bool:
             from hermes_state import SessionDB
 
             db = SessionDB(db_path=Path(profile_home) / "state.db")
-        except Exception:
+        except Exception as exc:
+            session["_session_db_error"] = str(exc)
             logger.debug("failed to reattach profile session db", exc_info=True)
             return False
     else:
@@ -1661,6 +1663,42 @@ def _reattach_session_db_if_available(session: dict) -> bool:
     except Exception:
         logger.debug("failed to assign reattached session db", exc_info=True)
         return False
+
+
+def _warn_session_db_unavailable_if_needed(sid: str, session: dict) -> bool:
+    """Surface live-only TUI persistence degradation once per session.
+
+    Classic CLI already prints a prominent warning when ``SessionDB`` cannot
+    open. The fullscreen TUI gateway used to only log the same condition, so a
+    chat could look healthy while its transcript was not reaching ``state.db``.
+    Keep the runtime permissive, but make the risk visible where the user is
+    actually looking.
+    """
+    agent = session.get("agent")
+    if agent is None or getattr(agent, "_session_db", None) is not None:
+        return False
+    if session.get("_session_db_unavailable_warned"):
+        return False
+    session["_session_db_unavailable_warned"] = True
+
+    detail = str(session.get("_session_db_error") or _db_error or "").strip()
+    if not detail:
+        try:
+            from hermes_state import get_last_init_error
+
+            detail = str(get_last_init_error() or "").strip()
+        except Exception:
+            detail = ""
+
+    text = (
+        "⚠ Session store unavailable — this TUI chat is running live-only. "
+        "Messages may NOT be saved to state.db and may not be resumable. "
+        "Restart after the DB lock/store issue is cleared."
+    )
+    if detail:
+        text = f"{text} Reason: {detail}"
+    _emit("status.update", sid, {"kind": "warn", "text": text})
+    return True
 
 
 def _persist_branch_seed(session: dict) -> None:
@@ -8583,6 +8621,7 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
             _wire_callbacks(sid)
             _sync_agent_model_with_config(sid, session)
             _reattach_session_db_if_available(session)
+            _warn_session_db_unavailable_if_needed(sid, session)
             cwd = _session_cwd(session)
             _register_session_cwd(session)
             cols = session.get("cols", 80)
