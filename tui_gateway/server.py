@@ -4289,7 +4289,8 @@ def _reattach_session_db_if_available(session: dict) -> bool:
 
             db = SessionDB(db_path=Path(profile_home) / "state.db")
             owns_db = True
-        except Exception:
+        except Exception as exc:
+            session["_session_db_error"] = str(exc)
             logger.debug("failed to reattach profile session db", exc_info=True)
             return False
     else:
@@ -4312,6 +4313,42 @@ def _reattach_session_db_if_available(session: dict) -> bool:
     except Exception:
         logger.debug("failed to assign reattached session db", exc_info=True)
         return False
+
+
+def _warn_session_db_unavailable_if_needed(sid: str, session: dict) -> bool:
+    """Surface live-only TUI persistence degradation once per session.
+
+    Classic CLI already prints a prominent warning when ``SessionDB`` cannot
+    open. The fullscreen TUI gateway used to only log the same condition, so a
+    chat could look healthy while its transcript was not reaching ``state.db``.
+    Keep the runtime permissive, but make the risk visible where the user is
+    actually looking.
+    """
+    agent = session.get("agent")
+    if agent is None or getattr(agent, "_session_db", None) is not None:
+        return False
+    if session.get("_session_db_unavailable_warned"):
+        return False
+    session["_session_db_unavailable_warned"] = True
+
+    detail = str(session.get("_session_db_error") or _db_error or "").strip()
+    if not detail:
+        try:
+            from hermes_state import get_last_init_error
+
+            detail = str(get_last_init_error() or "").strip()
+        except Exception:
+            detail = ""
+
+    text = (
+        "⚠ Session store unavailable — this TUI chat is running live-only. "
+        "Messages may NOT be saved to state.db and may not be resumable. "
+        "Restart after the DB lock/store issue is cleared."
+    )
+    if detail:
+        text = f"{text} Reason: {detail}"
+    _emit("status.update", sid, {"kind": "warn", "text": text})
+    return True
 
 
 def _persist_branch_seed(session: dict) -> None:
@@ -13412,6 +13449,7 @@ def _run_prompt_submit(
             _sync_bot_capabilities(sid, session)
             agent = session["agent"]
             _reattach_session_db_if_available(session)
+            _warn_session_db_unavailable_if_needed(sid, session)
             # Snapshot after turn-start model sync. A deferred switch mutates
             # history and its version; that mutation belongs to this turn.
             with session["history_lock"]:

@@ -224,6 +224,66 @@ def test_reattach_profile_session_db_transfers_ownership(monkeypatch, tmp_path):
     assert agent._session_db.closed is False
 
 
+def test_warn_session_db_unavailable_emits_once(monkeypatch):
+    """Fullscreen TUI must visibly warn when a chat is running live-only."""
+    agent = types.SimpleNamespace(_session_db=None, session_id="stored-session")
+    session = {
+        "agent": agent,
+        "session_key": "stored-session",
+        "_session_db_error": "database is locked",
+    }
+    events = []
+    monkeypatch.setattr(
+        server,
+        "_emit",
+        lambda event_type, sid, payload: events.append((event_type, sid, payload)),
+    )
+
+    assert server._warn_session_db_unavailable_if_needed("sid-1", session) is True
+    assert server._warn_session_db_unavailable_if_needed("sid-1", session) is False
+    assert len(events) == 1
+    assert events[0][0] == "status.update"
+    assert events[0][1] == "sid-1"
+    assert events[0][2]["kind"] == "warn"
+    assert "running live-only" in events[0][2]["text"]
+    assert "database is locked" in events[0][2]["text"]
+
+
+def test_warn_session_db_unavailable_skips_attached_agent(monkeypatch):
+    agent = types.SimpleNamespace(_session_db=object(), session_id="stored-session")
+    events = []
+    monkeypatch.setattr(
+        server,
+        "_emit",
+        lambda event_type, sid, payload: events.append((event_type, sid, payload)),
+    )
+
+    assert server._warn_session_db_unavailable_if_needed("sid-1", {"agent": agent}) is False
+    assert events == []
+
+
+def test_reattach_session_db_records_profile_failure_reason(monkeypatch, tmp_path):
+    agent = types.SimpleNamespace(_session_db=None, session_id="stored-session")
+
+    class BrokenSessionDB:
+        def __init__(self, **_kwargs):
+            raise RuntimeError("profile db locked")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "hermes_state",
+        types.SimpleNamespace(SessionDB=BrokenSessionDB),
+    )
+    session = {
+        "agent": agent,
+        "session_key": "stored-session",
+        "profile_home": str(tmp_path),
+    }
+
+    assert server._reattach_session_db_if_available(session) is False
+    assert session["_session_db_error"] == "profile db locked"
+
+
 def test_handoff_fail_marks_only_inflight_rows(monkeypatch):
     class DbContext:
         def __init__(self, db):
