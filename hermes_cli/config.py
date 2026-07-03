@@ -1694,6 +1694,10 @@ DEFAULT_CONFIG = {
         # context" block. Off by default because recalled memory can be personal;
         # power users can enable it to audit auto-injected memory quality.
         "tui_memory_context": False,
+        # Gateway debug knob for surfacing the external-memory context injected
+        # into a turn. Off by default; per-platform overrides should be used,
+        # e.g. display.platforms.slack.memory_context: true/private.
+        "memory_context": False,
         "bell_on_complete": False,
         "bell_on_prompt": False,
         "show_reasoning": False,
