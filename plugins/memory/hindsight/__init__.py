@@ -504,6 +504,47 @@ def _normalize_retain_tags(value: Any) -> List[str]:
 _OBSERVATION_SCOPE_KEYWORDS = {"per_tag", "combined", "all_combinations"}
 
 
+def _metadata_dict(result: Any) -> dict[str, Any]:
+    metadata = getattr(result, "metadata", None)
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _tags_list(result: Any) -> list[str]:
+    tags = getattr(result, "tags", None)
+    if isinstance(tags, (list, tuple)):
+        return [str(tag).strip() for tag in tags if str(tag).strip()]
+    return []
+
+
+def _recall_source_label(result: Any) -> str:
+    """Return a compact provenance label for a recalled memory result."""
+    for tag in _tags_list(result):
+        if tag.startswith("profile:"):
+            return tag
+
+    metadata = _metadata_dict(result)
+    agent_identity = str(metadata.get("agent_identity") or "").strip()
+    if agent_identity:
+        return f"profile:{agent_identity}"
+
+    source = str(metadata.get("source") or "").strip()
+    if source.startswith("hermes-") and len(source) > len("hermes-"):
+        return f"profile:{source[len('hermes-'):]}".replace(" ", "-")
+    if source:
+        return f"source:{source}"
+    return "profile:unknown"
+
+
+def _format_recall_result(result: Any, *, index: int | None = None) -> str:
+    text = str(getattr(result, "text", "") or "").strip()
+    if not text:
+        return ""
+    prefix = f"{_recall_source_label(result)}: {text}"
+    if index is None:
+        return f"- {prefix}"
+    return f"{index}. {prefix}"
+
+
 def _normalize_observation_scopes(value: Any) -> Any:
     """Normalize an observation_scopes config value to a Hindsight-accepted form.
 
@@ -1920,7 +1961,10 @@ class HindsightMemoryProvider(MemoryProvider):
             resp = self._run_hindsight_operation(lambda client: client.arecall(**recall_kwargs))
             num_results = len(resp.results) if resp.results else 0
             logger.debug("Recall: returned %d results", num_results)
-            text = "\n".join(f"- {r.text}" for r in resp.results if r.text) if resp.results else ""
+            text = "\n".join(
+                line for line in (_format_recall_result(r) for r in resp.results)
+                if line
+            ) if resp.results else ""
             return _RecallResult(text, num_results)
         except Exception as e:
             logger.debug("Hindsight recall failed: %s", e, exc_info=True)
@@ -1933,8 +1977,8 @@ class HindsightMemoryProvider(MemoryProvider):
         logger.debug("Prefetch: returning %d chars of context", len(result))
         header = self._recall_prompt_preamble or (
             "# Hindsight Memory (persistent cross-session context)\n"
-            "Use this to answer questions about the user and prior sessions. "
-            "Do not call tools to look up information that is already present here."
+            "Use this as potentially relevant background about the user and prior sessions. "
+            "Verify or inspect source material when exact/current details matter."
         )
         return f"{header}\n\n{result}"
 
@@ -2269,7 +2313,12 @@ class HindsightMemoryProvider(MemoryProvider):
                 logger.debug("Tool hindsight_recall: %d results", num_results)
                 if not resp.results:
                     return json.dumps({"result": "No relevant memories found."})
-                lines = [f"{i}. {r.text}" for i, r in enumerate(resp.results, 1)]
+                lines = [
+                    line for line in (
+                        _format_recall_result(r, index=i)
+                        for i, r in enumerate(resp.results, 1)
+                    ) if line
+                ]
                 return json.dumps({"result": "\n".join(lines)})
             except Exception as e:
                 logger.warning("hindsight_recall failed: %s", e, exc_info=True)
