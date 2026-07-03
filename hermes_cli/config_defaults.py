@@ -1483,6 +1483,10 @@ DEFAULT_CONFIG = {
         # starts delegating, nudging the user toward the live spawn-tree
         # dashboard. Set false to suppress the hint.
         "tui_agents_nudge": True,
+        # Attach the external-memory prefetch payload used for the model call to
+        # the assistant reply as a collapsed audit block. Off by default because
+        # recalled memory may be personal.
+        "tui_memory_context": False,
         "bell_on_complete": False,
         # Bell when a blocking prompt opens (clarify/approval/sudo/secret).
         "bell_on_prompt": False,

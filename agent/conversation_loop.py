@@ -24,7 +24,7 @@ import re
 import ssl
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from agent.codex_responses_adapter import _summarize_user_message_for_log
 from agent.conversation_compression import (
@@ -2036,6 +2036,7 @@ def run_conversation(
     persist_user_display_metadata: Optional[Dict[str, Any]] = None,
     persist_user_platform_id: Optional[str] = None,
     moa_config: Optional[dict[str, Any]] = None,
+    memory_context_callback: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     """
     Run a complete conversation with tool calling until completion.
@@ -2184,6 +2185,11 @@ def run_conversation(
     _should_review_memory = _ctx.should_review_memory
     _plugin_user_context = _ctx.plugin_user_context
     _ext_prefetch_cache = _ctx.ext_prefetch_cache
+    if _ext_prefetch_cache and memory_context_callback is not None:
+        try:
+            memory_context_callback(_ext_prefetch_cache)
+        except Exception:
+            pass
 
     # Commentary deduplication spans all provider continuations and tool calls
     # within one user turn, but must not suppress the same phrase next turn.
@@ -9323,6 +9329,7 @@ def run_conversation(
         _turn_exit_reason=_turn_exit_reason,
         _pending_verification_response=_pending_verification_response,
         _pending_verification_response_previewed=_pending_verification_response_previewed,
+        memory_context=_ext_prefetch_cache,
     )
     if _compression_timeout_exhausted:
         # Reuse the gateway's existing context-recovery contract (#98722,

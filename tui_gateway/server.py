@@ -8670,6 +8670,15 @@ def _agent_cbs(sid: str) -> dict:
     return callbacks
 
 
+def _show_tui_memory_context() -> bool:
+    """Whether to include recalled memory context in TUI message payloads."""
+    try:
+        display = _load_cfg().get("display") or {}
+        return bool(isinstance(display, dict) and display.get("tui_memory_context") is True)
+    except Exception:
+        return False
+
+
 def _apply_project_workspace(task_id: str, path: str, _name: str = "") -> None:
     """Intentional workspace move from the project_* tools: re-anchor the live
     session's cwd to the chosen project's folder and push session.info so the
@@ -13641,6 +13650,15 @@ def _run_prompt_submit(
             else:
                 agent.interim_assistant_callback = None
 
+            emitted_memory_context = False
+
+            def _memory_context_available(memory_context: str):
+                nonlocal emitted_memory_context
+                if not (_show_tui_memory_context() and isinstance(memory_context, str) and memory_context.strip()):
+                    return
+                emitted_memory_context = True
+                _emit("memory_context.available", sid, {"memory_context": memory_context.strip()})
+
             run_kwargs = {
                 "conversation_history": list(history),
                 "stream_callback": _stream,
@@ -13656,6 +13674,8 @@ def _run_prompt_submit(
             # the same value is a no-op.
             try:
                 _run_params = inspect.signature(agent.run_conversation).parameters
+                if "memory_context_callback" in _run_params:
+                    run_kwargs["memory_context_callback"] = _memory_context_available
             except (TypeError, ValueError):
                 _run_params = {}
             if "task_id" in _run_params:
@@ -13865,6 +13885,9 @@ def _run_prompt_submit(
             payload = {"text": raw, "usage": _get_usage(agent), "status": status}
             if last_reasoning:
                 payload["reasoning"] = last_reasoning
+            memory_context = result.get("memory_context") if isinstance(result, dict) else None
+            if not emitted_memory_context and _show_tui_memory_context() and isinstance(memory_context, str) and memory_context.strip():
+                payload["memory_context"] = memory_context.strip()
             if status_note:
                 payload["warning"] = status_note
             if result.get("response_previewed"):

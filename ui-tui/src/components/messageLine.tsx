@@ -27,6 +27,7 @@ import { TodoPanel } from './todoPanel.js'
 
 // Collapse threshold for long system messages (system prompt etc.)
 const SYSTEM_COLLAPSE_CHARS = 400
+const MEMORY_PREVIEW_CHARS = 120
 
 // `display.timestamps` label — same HH:MM shape the classic CLI's default
 // `display.timestamp_format` ("%H:%M") produces on its message labels, so
@@ -74,6 +75,7 @@ export const MessageLine = memo(function MessageLine({
   const toolsMode = sectionMode('tools', detailsMode, sections, detailsModeCommandOverride)
   const activityMode = sectionMode('activity', detailsMode, sections, detailsModeCommandOverride)
   const thinking = msg.thinking?.trim() ?? ''
+  const memoryContext = msg.memoryContext?.trim() ?? ''
 
   // One blank line above this block iff it opens a new visual group relative
   // to the block directly above it (`prev`) — the flex-grouping rule. Applied
@@ -86,6 +88,7 @@ export const MessageLine = memo(function MessageLine({
   // Collapse toggle for long system messages
   const systemIsLong = msg.role === 'system' && msg.text.length > SYSTEM_COLLAPSE_CHARS
   const [systemOpen, setSystemOpen] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
 
   if (msg.kind === 'trail' && msg.todos?.length) {
     return (
@@ -172,6 +175,8 @@ export const MessageLine = memo(function MessageLine({
     (toolsMode !== 'hidden' && Boolean(msg.tools?.length)) || (thinkingMode !== 'hidden' && Boolean(thinking))
 
   const showResponseSeparator = shouldShowResponseSeparator(msg, showDetails)
+  const showMemoryContext = msg.role === 'assistant' && Boolean(memoryContext)
+  const isMemoryOnly = msg.kind === 'memory' && showMemoryContext && !msg.text.trim()
 
   const content = (() => {
     if (msg.kind === 'slash') {
@@ -288,6 +293,29 @@ export const MessageLine = memo(function MessageLine({
         </Box>
       )}
 
+      {showMemoryContext && (
+        <Box flexDirection="column" marginBottom={1} marginLeft={gutterWidth}>
+          <Box onClick={() => setMemoryOpen(v => !v)}>
+            <Text color={t.color.accent}>{memoryOpen ? '▾ ' : '▸ '}</Text>
+            <Text color={t.color.muted}>Memory recall context</Text>
+            <Text color={t.color.muted} dimColor>
+              {' — '}
+              {memoryContext.length.toLocaleString()} chars
+            </Text>
+          </Box>
+          {memoryOpen ? (
+            <Text color={t.color.muted} wrap="wrap-trim">
+              {memoryContext}
+            </Text>
+          ) : (
+            <Text color={t.color.muted} dimColor wrap="truncate-end">
+              {memoryContext.slice(0, MEMORY_PREVIEW_CHARS)}
+              {memoryContext.length > MEMORY_PREVIEW_CHARS ? '…' : ''}
+            </Text>
+          )}
+        </Box>
+      )}
+
       {showResponseSeparator && (
         <Box marginBottom={1}>
           <NoSelect flexShrink={0} fromLeftEdge width={gutterWidth}>
@@ -310,15 +338,17 @@ export const MessageLine = memo(function MessageLine({
         </Box>
       )}
 
-      <Box>
-        <NoSelect flexShrink={0} fromLeftEdge width={gutterWidth}>
-          <Text bold={msg.role === 'user'} color={prefix}>
-            {glyph}{' '}
-          </Text>
-        </NoSelect>
+      {!isMemoryOnly && (
+        <Box>
+          <NoSelect flexShrink={0} fromLeftEdge width={gutterWidth}>
+            <Text bold={msg.role === 'user'} color={prefix}>
+              {glyph}{' '}
+            </Text>
+          </NoSelect>
 
-        <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>{content}</Box>
-      </Box>
+          <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>{content}</Box>
+        </Box>
+      )}
     </Box>
   )
 })

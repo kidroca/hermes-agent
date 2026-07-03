@@ -9268,6 +9268,7 @@ class AIAgent:
         persist_user_display_metadata: Optional[Dict[str, Any]] = None,
         persist_user_platform_id: Optional[str] = None,
         moa_config: Optional[dict[str, Any]] = None,
+        memory_context_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         """Forwarder — see ``agent.conversation_loop.run_conversation``."""
         # A review deliberately shares this agent's session_id for prompt-cache
@@ -9827,6 +9828,7 @@ class AIAgent:
                         persist_user_display_metadata=persist_user_display_metadata,
                         persist_user_platform_id=persist_user_platform_id,
                         moa_config=moa_config,
+                        memory_context_callback=memory_context_callback,
                     )
                 finally:
                     # The lease remains held through relay/task finalization, but
@@ -9836,6 +9838,7 @@ class AIAgent:
                     # Interrupt clear is deferred to after thread join in the
                     # outer finally: a refresher firing between stop and join
                     # would otherwise set an interrupt that survives the clear.
+
             terminal = result if isinstance(result, dict) else {}
             if terminal.get("interrupted") is True:
                 relay_outcome = "cancelled"

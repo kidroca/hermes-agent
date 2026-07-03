@@ -45,6 +45,9 @@ const diffSegmentBody = (msg: Msg): null | string => {
 
 const hasDetails = (msg: Msg): boolean => Boolean(msg.thinking || msg.tools?.length || msg.toolTokens)
 
+const normalizeMemoryContext = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : ''
+
 const isTodoStatus = (status: unknown): status is TodoItem['status'] =>
   status === 'pending' || status === 'in_progress' || status === 'completed' || status === 'cancelled'
 
@@ -555,6 +558,21 @@ class TurnController {
     })
   }
 
+  recordMemoryContext(value: unknown) {
+    if (this.interrupted) {
+      return
+    }
+
+    const memoryContext = normalizeMemoryContext(value)
+
+    if (!memoryContext || this.segmentMessages.some(msg => msg.memoryContext === memoryContext)) {
+      return
+    }
+
+    this.segmentMessages = [...this.segmentMessages, { kind: 'memory', memoryContext, role: 'assistant', text: '' }]
+    patchTurnState({ streamSegments: this.segmentMessages })
+  }
+
   recordError() {
     this.idle()
     this.clearReasoning()
@@ -569,6 +587,7 @@ class TurnController {
   }
 
   recordMessageComplete(payload: {
+    memory_context?: string
     rendered?: string
     reasoning?: string
     response_previewed?: boolean
@@ -644,8 +663,18 @@ class TurnController {
       ...(hasDetails(finalDetails) ? [finalDetails] : [])
     ]
 
+    const memoryContext = normalizeMemoryContext(payload.memory_context)
+
     if (finalText) {
-      finalMessages.push({ role: 'assistant', text: finalText })
+      finalMessages.push({ role: 'assistant', text: finalText, ...(memoryContext && { memoryContext }) })
+    } else if (memoryContext) {
+      const lastAssistantIndex = finalMessages.findLastIndex(
+        msg => msg.role === 'assistant' && msg.kind !== 'diff' && Boolean(msg.text.trim())
+      )
+
+      if (lastAssistantIndex >= 0) {
+        finalMessages[lastAssistantIndex] = { ...finalMessages[lastAssistantIndex], memoryContext }
+      }
     }
 
     const wasInterrupted = this.interrupted

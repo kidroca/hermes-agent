@@ -1163,6 +1163,11 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
 
         return
 
+      case 'memory_context.available':
+        turnController.recordMemoryContext(ev.payload?.memory_context)
+
+        return
+
       case 'tool.progress':
         if (ev.payload?.preview && ev.payload.name) {
           turnController.recordToolProgress(ev.payload.name, ev.payload.preview)

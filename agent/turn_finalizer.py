@@ -152,6 +152,7 @@ def finalize_turn(
     _turn_exit_reason,
     _pending_verification_response=None,
     _pending_verification_response_previewed=False,
+    memory_context="",
 ):
     """Run the post-loop finalization and return the turn ``result`` dict.
 
@@ -750,6 +751,12 @@ def finalize_turn(
         ).get("service_tier"),
         "session_id": agent.session_id,
     }
+    if isinstance(memory_context, str) and memory_context.strip():
+        try:
+            from agent.memory_manager import sanitize_context
+            result["memory_context"] = sanitize_context(memory_context).strip()
+        except Exception:
+            result["memory_context"] = memory_context.strip()
     if agent._tool_guardrail_halt_decision is not None:
         result["guardrail"] = agent._tool_guardrail_halt_decision.to_metadata()
     # Persistence failures already set failed=True + an explanation in
