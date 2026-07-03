@@ -5149,6 +5149,7 @@ def run_conversation(
         original_user_message=original_user_message,
         _should_review_memory=_should_review_memory,
         _turn_exit_reason=_turn_exit_reason,
+        memory_context=ext_prefetch_cache,
     )
 
 

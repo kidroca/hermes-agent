@@ -45,6 +45,9 @@ const diffSegmentBody = (msg: Msg): null | string => {
 
 const hasDetails = (msg: Msg): boolean => Boolean(msg.thinking || msg.tools?.length || msg.toolTokens)
 
+const normalizeMemoryContext = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : ''
+
 const isTodoStatus = (status: unknown): status is TodoItem['status'] =>
   status === 'pending' || status === 'in_progress' || status === 'completed' || status === 'cancelled'
 
@@ -554,7 +557,7 @@ class TurnController {
     this.flushPendingNotice()
   }
 
-  recordMessageComplete(payload: { rendered?: string; reasoning?: string; text?: string }) {
+  recordMessageComplete(payload: { memory_context?: string; rendered?: string; reasoning?: string; text?: string }) {
     this.closeReasoningSegment()
 
     // Ink renders markdown via <Md>; the gateway's Rich-rendered ANSI
@@ -618,7 +621,8 @@ class TurnController {
     ]
 
     if (finalText) {
-      finalMessages.push({ role: 'assistant', text: finalText })
+      const memoryContext = normalizeMemoryContext(payload.memory_context)
+      finalMessages.push({ role: 'assistant', text: finalText, ...(memoryContext && { memoryContext }) })
     }
 
     const wasInterrupted = this.interrupted

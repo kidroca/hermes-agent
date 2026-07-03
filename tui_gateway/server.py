@@ -3777,6 +3777,15 @@ def _agent_cbs(sid: str) -> dict:
     }
 
 
+def _show_tui_memory_context() -> bool:
+    """Whether to include recalled memory context in TUI message payloads."""
+    try:
+        display = _load_cfg().get("display") or {}
+        return bool(isinstance(display, dict) and display.get("tui_memory_context") is True)
+    except Exception:
+        return False
+
+
 def _apply_project_workspace(task_id: str, path: str, _name: str = "") -> None:
     """Intentional workspace move from the project_* tools: re-anchor the live
     session's cwd to the chosen project's folder and push session.info so the
@@ -8842,6 +8851,9 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
             payload = {"text": raw, "usage": _get_usage(agent, usage_messages), "status": status}
             if last_reasoning:
                 payload["reasoning"] = last_reasoning
+            memory_context = result.get("memory_context") if isinstance(result, dict) else None
+            if _show_tui_memory_context() and isinstance(memory_context, str) and memory_context.strip():
+                payload["memory_context"] = memory_context.strip()
             if status_note:
                 payload["warning"] = status_note
             rendered = render_message(raw, cols)

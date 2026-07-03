@@ -3290,6 +3290,10 @@ _AUX_TASKS: list[tuple[str, str, str]] = [
     ("kanban_decomposer", "Kanban decomposer", "task decomposition"),
     ("profile_describer", "Profile describer", "auto profile descriptions"),
     ("curator", "Curator", "skill-usage review pass"),
+    ("monitor", "Monitor", "importance/urgency scoring"),
+    ("background_review", "Background review", "post-turn memory/skill review"),
+    ("moa_reference", "MoA reference", "mixture-of-agents reference calls"),
+    ("moa_aggregator", "MoA aggregator", "mixture-of-agents synthesis"),
 ]
 
 

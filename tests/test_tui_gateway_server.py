@@ -4878,6 +4878,7 @@ def test_prompt_submit_history_version_match_persists_normally(monkeypatch):
         ):
             return {
                 "final_response": "reply",
+                "memory_context": "## Hindsight\nPeter likes compact output.",
                 "messages": [{"role": "assistant", "content": "reply"}],
             }
 
@@ -4893,6 +4894,7 @@ def test_prompt_submit_history_version_match_persists_normally(monkeypatch):
     try:
         monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
         monkeypatch.setattr(server, "_get_usage", lambda _a, _m=None: {})
+        monkeypatch.setattr(server, "_load_cfg", lambda: {"display": {"tui_memory_context": True}})
         monkeypatch.setattr(server, "render_message", lambda _t, _c: "")
         monkeypatch.setattr(server, "_emit", lambda *a: emits.append(a))
 
@@ -4916,6 +4918,7 @@ def test_prompt_submit_history_version_match_persists_normally(monkeypatch):
         assert len(complete_calls) == 1
         _, _, payload = complete_calls[0]
         assert "warning" not in payload
+        assert payload["memory_context"] == "## Hindsight\nPeter likes compact output."
     finally:
         server._sessions.pop("sid", None)
 

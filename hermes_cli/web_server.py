@@ -4156,10 +4156,15 @@ _AUX_TASK_SLOTS: Tuple[str, ...] = (
     "approval",
     "mcp",
     "title_generation",
+    "tts_audio_tags",
     "triage_specifier",
     "kanban_decomposer",
     "profile_describer",
     "curator",
+    "monitor",
+    "background_review",
+    "moa_reference",
+    "moa_aggregator",
 )
 
 

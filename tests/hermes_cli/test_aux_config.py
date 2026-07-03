@@ -51,11 +51,29 @@ def test_session_search_no_longer_appears_in_auxiliary_model_config():
 def test_aux_tasks_keys_all_exist_in_default_config():
     """Every task the menu offers must be defined in DEFAULT_CONFIG."""
     aux_keys = {k for k, _name, _desc in _AUX_TASKS}
-    default_keys = set(DEFAULT_CONFIG["auxiliary"].keys())
+    default_keys = {
+        k for k, v in DEFAULT_CONFIG["auxiliary"].items()
+        if isinstance(v, dict)
+    }
     missing = aux_keys - default_keys
     assert not missing, (
         f"_AUX_TASKS references tasks not in DEFAULT_CONFIG.auxiliary: {missing}"
     )
+    hidden = default_keys - aux_keys
+    assert not hidden, (
+        f"DEFAULT_CONFIG.auxiliary tasks missing from _AUX_TASKS: {hidden}"
+    )
+
+
+def test_web_aux_slots_match_default_config():
+    """Dashboard aux allowlist must expose every model-backed aux task."""
+    from hermes_cli.web_server import _AUX_TASK_SLOTS
+
+    default_keys = {
+        k for k, v in DEFAULT_CONFIG["auxiliary"].items()
+        if isinstance(v, dict)
+    }
+    assert set(_AUX_TASK_SLOTS) == default_keys
 
 
 # ── _format_aux_current ─────────────────────────────────────────────────────

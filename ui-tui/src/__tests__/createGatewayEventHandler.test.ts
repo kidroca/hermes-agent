@@ -249,6 +249,23 @@ describe('createGatewayEventHandler', () => {
     expect(appended[1]).toMatchObject({ role: 'assistant', text: 'final answer' })
   })
 
+  it('attaches memory recall context to the completed assistant message', () => {
+    const appended: Msg[] = []
+    const onEvent = createGatewayEventHandler(buildCtx(appended))
+
+    onEvent({
+      payload: { memory_context: '## Hindsight\nPeter likes compact output.', text: 'final answer' },
+      type: 'message.complete'
+    } as any)
+
+    expect(appended).toHaveLength(1)
+    expect(appended[0]).toMatchObject({
+      memoryContext: '## Hindsight\nPeter likes compact output.',
+      role: 'assistant',
+      text: 'final answer'
+    })
+  })
+
   it('groups sequential completed tools into one trail when the turn completes', () => {
     const appended: Msg[] = []
     const onEvent = createGatewayEventHandler(buildCtx(appended))
