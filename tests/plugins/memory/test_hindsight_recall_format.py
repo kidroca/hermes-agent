@@ -25,6 +25,12 @@ def test_recall_source_label_derives_profile_from_retain_source():
     assert _recall_source_label(result) == "profile:lad-studio"
 
 
+def test_recall_source_label_does_not_claim_profile_when_unknown():
+    result = SimpleNamespace(metadata={}, tags=[], text="Plain memory")
+
+    assert _recall_source_label(result) == "source:unknown"
+
+
 def test_format_recall_result_prefixes_memory_with_profile_source():
     result = SimpleNamespace(tags=["session:abc", "profile:default"], text="Peter prefers concise output.")
 
