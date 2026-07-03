@@ -42,6 +42,7 @@ def finalize_turn(
     original_user_message,
     _should_review_memory,
     _turn_exit_reason,
+    memory_context="",
 ):
     """Run the post-loop finalization and return the turn ``result`` dict.
 
@@ -426,6 +427,12 @@ def finalize_turn(
         "cost_source": agent.session_cost_source,
         "session_id": agent.session_id,
     }
+    if isinstance(memory_context, str) and memory_context.strip():
+        try:
+            from agent.memory_manager import sanitize_context
+            result["memory_context"] = sanitize_context(memory_context).strip()
+        except Exception:
+            result["memory_context"] = memory_context.strip()
     if agent._tool_guardrail_halt_decision is not None:
         result["guardrail"] = agent._tool_guardrail_halt_decision.to_metadata()
     # Surface any post-loop cleanup failures so the caller can distinguish a

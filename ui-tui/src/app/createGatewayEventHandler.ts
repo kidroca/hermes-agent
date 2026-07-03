@@ -703,6 +703,11 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
         // through the normal message stream. No committed transcript entry.
         return
 
+      case 'memory_context.available':
+        turnController.recordMemoryContext(ev.payload?.memory_context)
+
+        return
+
       case 'tool.progress':
         if (ev.payload?.preview && ev.payload.name) {
           turnController.recordToolProgress(ev.payload.name, ev.payload.preview)

@@ -25,7 +25,7 @@ import ssl
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from agent.codex_responses_adapter import _summarize_user_message_for_log
 from agent.conversation_compression import conversation_history_after_compression
@@ -525,6 +525,7 @@ def run_conversation(
     persist_user_message: Optional[str] = None,
     persist_user_timestamp: Optional[float] = None,
     moa_config: Optional[dict[str, Any]] = None,
+    memory_context_callback: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     """
     Run a complete conversation with tool calling until completion.
@@ -596,6 +597,11 @@ def run_conversation(
     _should_review_memory = _ctx.should_review_memory
     _plugin_user_context = _ctx.plugin_user_context
     _ext_prefetch_cache = _ctx.ext_prefetch_cache
+    if _ext_prefetch_cache and memory_context_callback is not None:
+        try:
+            memory_context_callback(_ext_prefetch_cache)
+        except Exception:
+            pass
 
     # Main conversation loop counters (pure locals consumed by the loop below).
     api_call_count = 0
@@ -5149,6 +5155,7 @@ def run_conversation(
         original_user_message=original_user_message,
         _should_review_memory=_should_review_memory,
         _turn_exit_reason=_turn_exit_reason,
+        memory_context=_ext_prefetch_cache,
     )
 
 

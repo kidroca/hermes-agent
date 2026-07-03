@@ -1689,6 +1689,11 @@ DEFAULT_CONFIG = {
         # starts delegating, nudging the user toward the live spawn-tree
         # dashboard. Set false to suppress the hint.
         "tui_agents_nudge": True,
+        # When true, the TUI attaches the external-memory prefetch payload used
+        # for the model call to the assistant reply as a collapsed "Memory recall
+        # context" block. Off by default because recalled memory can be personal;
+        # power users can enable it to audit auto-injected memory quality.
+        "tui_memory_context": False,
         "bell_on_complete": False,
         "bell_on_prompt": False,
         "show_reasoning": False,

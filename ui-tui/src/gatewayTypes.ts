@@ -706,9 +706,10 @@ export type GatewayEvent =
   | { payload: SubagentEventPayload; session_id?: string; type: 'subagent.tool' }
   | { payload: SubagentEventPayload; session_id?: string; type: 'subagent.progress' }
   | { payload: SubagentEventPayload; session_id?: string; type: 'subagent.complete' }
+  | { payload?: { memory_context?: string }; session_id?: string; type: 'memory_context.available' }
   | { payload: { rendered?: string; text?: string }; session_id?: string; type: 'message.delta' }
   | {
-      payload?: { reasoning?: string; rendered?: string; text?: string; usage?: Usage }
+      payload?: { memory_context?: string; reasoning?: string; rendered?: string; text?: string; usage?: Usage }
       session_id?: string
       type: 'message.complete'
     }
