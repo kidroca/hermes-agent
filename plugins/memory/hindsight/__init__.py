@@ -532,14 +532,15 @@ def _recall_source_label(result: Any) -> str:
         return f"profile:{source[len('hermes-'):]}".replace(" ", "-")
     if source:
         return f"source:{source}"
-    return "source:unknown"
+    return ""
 
 
 def _format_recall_result(result: Any, *, index: int | None = None) -> str:
     text = str(getattr(result, "text", "") or "").strip()
     if not text:
         return ""
-    prefix = f"{_recall_source_label(result)}: {text}"
+    source_label = _recall_source_label(result)
+    prefix = f"{source_label}: {text}" if source_label else text
     if index is None:
         return f"- {prefix}"
     return f"{index}. {prefix}"
