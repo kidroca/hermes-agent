@@ -52,6 +52,10 @@ _GLOBAL_DEFAULTS: dict[str, Any] = {
     # Disable when the platform should steer silently (the text still lands in
     # the active run; only the confirmation echo is suppressed).
     "busy_steer_ack_enabled": True,
+    # Debug-only display of the memory context injected into the agent turn.
+    # False/off by default; Slack treats boolean true as a private/ephemeral
+    # notice to the sender to avoid channel noise.
+    "memory_context": False,
     # When true, delete tool-progress / "⏳ Working — N min" / status bubbles
     # after the final response lands on platforms that support message
     # deletion (e.g. Telegram). Off by default — progress is still shown

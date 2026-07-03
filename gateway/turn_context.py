@@ -39,6 +39,7 @@ class TurnContext:
     _live_status_adapter: Any = None
     _live_status_mode: str = "off"
     _thinking_enabled: bool = False
+    _memory_context_display_mode: str = "off"
     progress_mode: str = "off"
     progress_grouping: str = "grouped"
     tool_progress_enabled: bool = False
@@ -123,6 +124,7 @@ class TurnContext:
     _voice_ack_fired: list = field(default_factory=lambda: [False])
     _voice_ack_guild: list = field(default_factory=lambda: [None])
     _voice_ack_loop: Any = None
+    _memory_context_notice_sent: list = field(default_factory=lambda: [False])
 
     # --- hook / status bridge wiring (published at original binding sites) -
     _loop_for_step: Any = None

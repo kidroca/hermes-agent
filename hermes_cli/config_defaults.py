@@ -1487,6 +1487,10 @@ DEFAULT_CONFIG = {
         # the assistant reply as a collapsed audit block. Off by default because
         # recalled memory may be personal.
         "tui_memory_context": False,
+        # Gateway debug knob for surfacing the external-memory context injected
+        # into a turn. Off by default; prefer per-platform overrides such as
+        # display.platforms.slack.memory_context: true/private.
+        "memory_context": False,
         "bell_on_complete": False,
         # Bell when a blocking prompt opens (clarify/approval/sudo/secret).
         "bell_on_prompt": False,

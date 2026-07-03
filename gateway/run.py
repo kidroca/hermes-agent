@@ -3210,6 +3210,99 @@ logger = logging.getLogger(__name__)
 _EXECUTOR_QUIESCE_TIMEOUT = 2.0
 
 
+_GATEWAY_MEMORY_CONTEXT_MAX_CHARS = 8000
+
+
+def _resolve_gateway_memory_context_display(
+    user_config: Dict[str, Any],
+    platform_key: str,
+    platform: Platform,
+) -> str:
+    """Resolve gateway memory-context debug display mode."""
+    try:
+        from gateway.display_config import resolve_display_setting
+
+        raw = resolve_display_setting(user_config, platform_key, "memory_context", False)
+    except Exception:
+        raw = False
+
+    if isinstance(raw, bool):
+        if not raw:
+            return "off"
+        return "private" if platform == Platform.SLACK else "public"
+
+    value = str(raw or "").strip().lower()
+    if value in {"", "0", "false", "no", "off", "none"}:
+        return "off"
+    if value in {"1", "true", "yes", "on", "private", "ephemeral"}:
+        return "private" if platform == Platform.SLACK else "public"
+    if value in {"public", "channel"}:
+        return "public"
+    return "off"
+
+
+def _format_gateway_memory_context(memory_context: str) -> str:
+    """Format recalled memory context for gateway chat debug display."""
+    text = str(memory_context or "").strip()
+    if not text:
+        return ""
+    truncated = False
+    if len(text) > _GATEWAY_MEMORY_CONTEXT_MAX_CHARS:
+        text = text[:_GATEWAY_MEMORY_CONTEXT_MAX_CHARS].rstrip()
+        truncated = True
+    text = text.replace("```", "`\u200b``")
+    suffix = "\n\n… truncated" if truncated else ""
+    return f"🧠 *Memory recall context*\n```text\n{text}{suffix}\n```"
+
+
+async def _send_gateway_memory_context_display(
+    adapter: Any,
+    source: SessionSource,
+    memory_context: str,
+    *,
+    mode: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Send a gateway memory-context debug notice according to ``mode``."""
+    content = _format_gateway_memory_context(memory_context)
+    if not adapter or not content or mode == "off":
+        return
+
+    if mode == "private":
+        user_id = getattr(source, "user_id", None)
+        private_notice = getattr(type(adapter), "send_private_notice", None)
+        if (
+            not user_id
+            or private_notice is None
+            or private_notice is BasePlatformAdapter.send_private_notice
+        ):
+            return
+        try:
+            result = await adapter.send_private_notice(
+                source.chat_id,
+                user_id,
+                content,
+                metadata=metadata,
+            )
+            if getattr(result, "success", False):
+                return
+            logger.debug(
+                "[%s] memory-context private notice failed: %s",
+                getattr(source.platform, "value", source.platform),
+                getattr(result, "error", None),
+            )
+        except Exception:
+            logger.debug(
+                "[%s] memory-context private notice failed",
+                getattr(source.platform, "value", source.platform),
+                exc_info=True,
+            )
+        return
+
+    if mode == "public":
+        await adapter.send(source.chat_id, content, metadata=metadata)
+
+
 _OWN_POLICY_OPEN_ENV = {
     Platform.WECOM: ("WECOM_DM_POLICY", "WECOM_GROUP_POLICY", "WECOM_ALLOW_ALL_USERS"),
     Platform.WEIXIN: ("WEIXIN_DM_POLICY", "WEIXIN_GROUP_POLICY", "WEIXIN_ALLOW_ALL_USERS"),
@@ -5931,6 +6024,30 @@ class TurnRunner:
                     ctx._cleanup_msg_ids.append(str(mid))
             _fut.add_done_callback(_track_status_id)
 
+    def _memory_context_callback_sync(self, memory_context: str) -> None:
+        ctx = self._ctx
+        if (
+            ctx._memory_context_notice_sent[0]
+            or ctx._memory_context_display_mode == "off"
+            or not ctx._status_adapter
+            or not ctx._run_still_current()
+            or not str(memory_context or "").strip()
+        ):
+            return
+        ctx._memory_context_notice_sent[0] = True
+        safe_schedule_threadsafe(
+            _send_gateway_memory_context_display(
+                ctx._status_adapter,
+                ctx.source,
+                memory_context,
+                mode=ctx._memory_context_display_mode,
+                metadata=ctx._status_thread_metadata,
+            ),
+            ctx._loop_for_step,
+            logger=logger,
+            log_message="memory_context_callback scheduling error",
+        )
+
     def run_sync(self):
         ctx = self._ctx
         # Historical note: as a nested closure this body declared
@@ -7100,6 +7217,10 @@ class TurnRunner:
                 "conversation_history": agent_history,
                 "task_id": ctx.session_id,
             }
+            if ctx._memory_context_display_mode != "off":
+                _conversation_kwargs["memory_context_callback"] = (
+                    self._memory_context_callback_sync
+                )
             if _persist_user_message_override is not None:
                 _conversation_kwargs["persist_user_message"] = _persist_user_message_override
             elif observed_group_context:
@@ -31510,6 +31631,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             require_platform_override_for={Platform.MATTERMOST},
         )
         _thinking_enabled = _thinking_mode != "off"
+        _memory_context_display_mode = _resolve_gateway_memory_context_display(
+            user_config,
+            platform_key,
+            source.platform,
+        )
         # Slack-native task cards (#29483): when the Slack adapter's opt-in
         # is set, tool progress renders as native plan/task cards via
         # chat.startStream — the progress queue is needed even though Slack
@@ -31600,6 +31726,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             _live_status_adapter=_live_status_adapter,
             _live_status_mode=_live_status_mode,
             _thinking_enabled=_thinking_enabled,
+            _memory_context_display_mode=_memory_context_display_mode,
             progress_mode=progress_mode,
             progress_grouping=progress_grouping,
             tool_progress_enabled=tool_progress_enabled,
