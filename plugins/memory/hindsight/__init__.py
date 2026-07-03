@@ -460,14 +460,15 @@ def _recall_source_label(result: Any) -> str:
         return f"profile:{source[len('hermes-'):]}".replace(" ", "-")
     if source:
         return f"source:{source}"
-    return "source:unknown"
+    return ""
 
 
 def _format_recall_result(result: Any, *, index: int | None = None) -> str:
     text = str(getattr(result, "text", "") or "").strip()
     if not text:
         return ""
-    prefix = f"{_recall_source_label(result)}: {text}"
+    source_label = _recall_source_label(result)
+    prefix = f"{source_label}: {text}" if source_label else text
     if index is None:
         return f"- {prefix}"
     return f"{index}. {prefix}"
@@ -1505,12 +1506,24 @@ class HindsightMemoryProvider(MemoryProvider):
         )
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
+        pending_thread = False
         if self._prefetch_thread and self._prefetch_thread.is_alive():
             logger.debug("Prefetch: waiting for background thread to complete")
             self._prefetch_thread.join(timeout=3.0)
+            pending_thread = self._prefetch_thread.is_alive()
         with self._prefetch_lock:
             result = self._prefetch_result
             self._prefetch_result = ""
+        if not result and query and not pending_thread:
+            before = self._prefetch_thread
+            self.queue_prefetch(query, session_id=session_id)
+            thread = self._prefetch_thread
+            if thread is not None and thread is not before:
+                logger.debug("Prefetch: waiting for bootstrap recall")
+                thread.join(timeout=30.0)
+                with self._prefetch_lock:
+                    result = self._prefetch_result
+                    self._prefetch_result = ""
         if not result:
             logger.debug("Prefetch: no results available")
             return ""

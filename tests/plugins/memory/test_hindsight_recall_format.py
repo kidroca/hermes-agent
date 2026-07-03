@@ -25,10 +25,10 @@ def test_recall_source_label_derives_profile_from_retain_source():
     assert _recall_source_label(result) == "profile:lad-studio"
 
 
-def test_recall_source_label_does_not_claim_profile_when_unknown():
+def test_recall_source_label_is_empty_when_no_provenance_exists():
     result = SimpleNamespace(metadata={}, tags=[], text="Plain memory")
 
-    assert _recall_source_label(result) == "source:unknown"
+    assert _recall_source_label(result) == ""
 
 
 def test_format_recall_result_prefixes_memory_with_profile_source():
@@ -36,6 +36,13 @@ def test_format_recall_result_prefixes_memory_with_profile_source():
 
     assert _format_recall_result(result) == "- profile:default: Peter prefers concise output."
     assert _format_recall_result(result, index=2) == "2. profile:default: Peter prefers concise output."
+
+
+def test_format_recall_result_omits_source_prefix_when_no_provenance_exists():
+    result = SimpleNamespace(metadata={}, tags=[], text="Recovered memory")
+
+    assert _format_recall_result(result) == "- Recovered memory"
+    assert _format_recall_result(result, index=1) == "1. Recovered memory"
 
 
 def test_format_recall_result_skips_empty_text():
