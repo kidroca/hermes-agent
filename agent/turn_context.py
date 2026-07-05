@@ -25,6 +25,7 @@ move-and-name refactor with no semantic change.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -373,6 +374,13 @@ def reanchor_current_turn_user_idx(messages: List[Any], user_message: Any) -> in
         if fallback < 0:
             fallback = i
     return fallback
+
+
+def _memory_auto_prefetch_enabled() -> bool:
+    value = os.environ.get("HERMES_MEMORY_AUTO_PREFETCH")
+    if value is None:
+        return True
+    return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def compression_made_progress(
@@ -1578,7 +1586,7 @@ def build_turn_context(
     # Skip prefetch on trivial prompts (greetings, acknowledgements) to
     # prevent memory-context injection on turns that carry no semantic signal.
     ext_prefetch_cache = ""
-    if agent._memory_manager:
+    if agent._memory_manager and _memory_auto_prefetch_enabled():
         try:
             _query = original_user_message if isinstance(original_user_message, str) else ""
             if not is_trivial_prompt(_query):

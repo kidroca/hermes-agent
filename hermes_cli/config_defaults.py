@@ -2931,6 +2931,10 @@ DEFAULT_CONFIG = {
         # raise these to keep more early failure evidence.
         "worker_log_rotate_bytes": 2 * 1024 * 1024,
         "worker_log_backup_count": 1,
+        # Dispatcher-spawned workers start from a low-signal task prompt. Keep
+        # explicit memory tools available, but do not auto-inject external
+        # memory recalled from that prompt unless an operator opts back in.
+        "memory_auto_prefetch": False,
         # Profile assigned to the root/orchestration task after Triage
         # decomposition. When unset, falls back to the default profile (the
         # one `hermes` launches with no -p flag). This does not control the

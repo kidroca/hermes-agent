@@ -407,6 +407,32 @@ def test_recall_indicator_skipped_when_nothing_injected():
         assert "👁️" not in str(call)
 
 
+def test_memory_auto_prefetch_env_disables_prefetch_but_not_turn_start(monkeypatch):
+    agent = _FakeAgent()
+    memory_manager = MagicMock()
+    agent._memory_manager = memory_manager  # type: ignore[assignment]
+    monkeypatch.setenv("HERMES_MEMORY_AUTO_PREFETCH", "0")
+
+    ctx = _build(agent, user_message="work kanban task t_1234")
+
+    assert ctx.ext_prefetch_cache == ""
+    memory_manager.on_turn_start.assert_called_once()
+    memory_manager.prefetch_all.assert_not_called()
+
+
+def test_memory_auto_prefetch_env_defaults_enabled(monkeypatch):
+    agent = _FakeAgent()
+    memory_manager = MagicMock()
+    memory_manager.prefetch_all.return_value = "recalled context"
+    agent._memory_manager = memory_manager  # type: ignore[assignment]
+    monkeypatch.delenv("HERMES_MEMORY_AUTO_PREFETCH", raising=False)
+
+    ctx = _build(agent, user_message="normal chat query")
+
+    assert ctx.ext_prefetch_cache == "recalled context"
+    memory_manager.prefetch_all.assert_called_once_with("normal chat query")
+
+
 def test_ensure_db_session_runs_after_system_prompt_restore():
     """Regression for #45499.
 

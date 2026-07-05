@@ -83,9 +83,18 @@ agent:
     assert pid == 4242
     assert captured["env"]["HERMES_HOME"] == str(profile)
     assert captured["env"]["HERMES_KANBAN_TASK"] == "t_spawn_tools"
+    assert captured["env"]["HERMES_MEMORY_AUTO_PREFETCH"] == "0"
     assert "--toolsets" in captured["cmd"]
     pinned = captured["cmd"][captured["cmd"].index("--toolsets") + 1].split(",")
-    for required in ("terminal", "web", "file", "skills", "code_execution", "delegation"):
+    for required in (
+        "terminal",
+        "web",
+        "file",
+        "skills",
+        "memory",
+        "code_execution",
+        "delegation",
+    ):
         assert required in pinned
 
 
@@ -161,3 +170,40 @@ toolsets:
     assert "web" in resolved
     assert "kanban" in resolved  # recovered worker lifecycle surface
     assert resolved != ["kanban"]
+
+
+def test_default_spawn_honors_profile_kanban_memory_auto_prefetch(monkeypatch, tmp_path):
+    root = tmp_path / ".hermes"
+    profile = root / "profiles" / "elias"
+    profile.mkdir(parents=True)
+    profile.joinpath("config.yaml").write_text(
+        """
+kanban:
+  memory_auto_prefetch: true
+platform_toolsets:
+  cli:
+    - terminal
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HERMES_HOME", str(root))
+
+    from hermes_cli import kanban_db as kb
+
+    monkeypatch.setattr(kb, "_resolve_hermes_argv", lambda: ["hermes"])
+
+    captured = {}
+
+    class FakeProc:
+        pid = 4243
+
+    def fake_popen(cmd, *args, **kwargs):
+        captured["env"] = dict(kwargs.get("env") or {})
+        return FakeProc()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    assert kb._default_spawn(_make_task(kb, assignee="elias"), str(workspace)) == 4243
+    assert captured["env"]["HERMES_MEMORY_AUTO_PREFETCH"] == "1"

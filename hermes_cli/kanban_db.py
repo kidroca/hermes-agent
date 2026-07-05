@@ -10795,6 +10795,42 @@ def _restart_safe_worker_argv(task: Task, command: list[str]) -> list[str]:
     )
 
 
+def _truthy_config(value: object, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _worker_memory_auto_prefetch_env(hermes_home: Optional[str]) -> str:
+    """Return env value for Kanban worker external-memory auto-prefetch."""
+    try:
+        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+        from hermes_cli.config import load_config
+
+        token = set_hermes_home_override(hermes_home) if hermes_home else None
+        try:
+            cfg = load_config()
+        finally:
+            if token is not None:
+                reset_hermes_home_override(token)
+        enabled = _truthy_config(
+            (cfg.get("kanban") or {}).get("memory_auto_prefetch"),
+            default=False,
+        )
+    except Exception as exc:
+        _log.debug(
+            "kanban worker: could not resolve memory_auto_prefetch for HERMES_HOME=%r (%s)",
+            hermes_home,
+            exc,
+        )
+        enabled = False
+    return "1" if enabled else "0"
+
+
 def _default_spawn(
     task: Task,
     workspace: str,
@@ -10886,6 +10922,9 @@ def _default_spawn(
         env["HERMES_KANBAN_RUN_ID"] = str(task.current_run_id)
     if task.claim_lock:
         env["HERMES_KANBAN_CLAIM_LOCK"] = task.claim_lock
+    env["HERMES_MEMORY_AUTO_PREFETCH"] = _worker_memory_auto_prefetch_env(
+        env.get("HERMES_HOME")
+    )
     # Goal-loop mode: the worker reads these and wraps its run in the
     # Ralph-style /goal judge loop (see cli.py quiet-mode path). Only set
     # when enabled so non-goal tasks keep a clean env.
