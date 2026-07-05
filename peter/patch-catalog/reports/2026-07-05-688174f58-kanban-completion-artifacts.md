@@ -3,8 +3,9 @@
 - Date: 2026-07-05
 - Repo: `/opt/hermes-agent` (`NousResearch/hermes-agent` upstream)
 - Patch ref: `688174f58` (`fix: preserve kanban completion artifacts`)
-- Branch: `peter/hermes-patches` (tracking `peter/peter/hermes-patches`, ahead 1 at inspection time)
+- Branch: `peter/hermes-patches` (historical inspection state)
 - Local status: clean tracked tree except branch ahead state; no source files modified by this catalogue task
+- Rebase update (2026-07-13): superseded by upstream `e6c42b5d8` (`fix(kanban): preserve scratch completion artifacts`) and hardening follow-up `8030b01a2` (`fix(kanban): harden durable artifact handoff`). The local functional commit was intentionally dropped during rebase onto `main`.
 - Motivation: Kanban workers can declare completion artifacts that live in managed scratch workspaces. `complete_task()` records those paths, then immediately runs scratch cleanup, so the gateway notifier and later humans can be handed dead artifact paths. Peter hit this with completed task `t_30197418`, whose referenced `open-design-hermes-fit.md` had to be recovered from logs after the scratch workspace was deleted.
 - Changed files:
   - `hermes_cli/kanban_db.py` (+124): calls `_preserve_completion_artifacts()` before task completion transaction and scratch cleanup; copies declared `metadata["artifacts"]` into durable task attachments, records original paths, attachment ids, and preservation errors.
@@ -53,9 +54,7 @@ Ages are relative to the 2026-07-05 patch date.
 
 ## Recommendation
 
-Keep `688174f58` in Peter's local stack for now. Upstream has multiple overlapping open PRs, but no confirmed merged fix or maintainer approval was found. Watch #55903 first because it matches the local best-effort archive semantics most closely. Also watch #56685 because collaborator triage explicitly identifies the competing hard-gate design; if that path wins upstream, re-evaluate whether Peter wants strict completion failure for missing artifacts or the current best-effort behavior.
-
-On next upstream rebase/update, expect conflicts in `hermes_cli/kanban_db.py::complete_task()` and `tests/hermes_cli/test_kanban_db.py`. Resolve by preserving three invariants from the local patch unless upstream provides equivalent behavior: (1) declared scratch artifact bytes are copied before scratch cleanup, (2) completion event/run metadata points at durable paths, and (3) basename collisions keep both files.
+The local artifact-preservation patch is now obsolete: upstream `e6c42b5d8` implemented the durable scratch-artifact flow, and `8030b01a2` subsequently hardened the handoff across the DB, tool, gateway, dashboard, and tests. It was intentionally dropped during the 2026-07-13 rebase. Retain this report as historical context only; future work should build on the upstream implementation.
 
 ## Raw search queries used
 
