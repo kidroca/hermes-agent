@@ -49,6 +49,7 @@ from typing import Any, Callable, Dict, List, Optional
 from agent.secret_scope import get_secret
 
 from agent.memory_provider import MemoryProvider, RecallStatus
+from agent.credits_tracker import AgentNotice
 from hermes_constants import get_hermes_home
 from hermes_time import now as _hermes_now
 from tools.registry import tool_error
@@ -871,6 +872,9 @@ class HindsightMemoryProvider(MemoryProvider):
         # deliberately coarser than the 0.05s local queue-drain poll: ~20 calls
         # max over the default 10s budget instead of ~200.
         self._RETAIN_OP_POLL_INTERVAL_S = 0.5
+        self._notice_callback = None
+        self._notice_clear_callback = None
+        self._retain_failure_alerted = False
         # Legacy alias — older tests/callers reference _sync_thread directly.
         # Points at _writer_thread once the writer is running.
         self._sync_thread = None
@@ -1558,10 +1562,41 @@ class HindsightMemoryProvider(MemoryProvider):
                     return
                 try:
                     job()
+                    self._emit_retain_success_notice()
                 except Exception as exc:
                     logger.warning("Hindsight retain failed: %s", exc, exc_info=True)
+                    self._emit_retain_failure_notice(exc)
             finally:
                 self._retain_queue.task_done()
+
+    def _emit_retain_failure_notice(self, exc: Exception) -> None:
+        """Surface the first failed background retain through the active UI rail."""
+        if self._retain_failure_alerted:
+            return
+        self._retain_failure_alerted = True
+        if callable(self._notice_callback):
+            self._notice_callback(AgentNotice(
+                text="✕ Hindsight memory writes failed. Check Hermes logs.",
+                level="error",
+                kind="sticky",
+                key="hindsight.retain",
+            ))
+
+    def _emit_retain_success_notice(self) -> None:
+        """Clear a retained-write failure notice after a real write recovers."""
+        if not self._retain_failure_alerted:
+            return
+        self._retain_failure_alerted = False
+        if callable(self._notice_clear_callback):
+            self._notice_clear_callback("hindsight.retain")
+        if callable(self._notice_callback):
+            self._notice_callback(AgentNotice(
+                text="✓ Hindsight memory writes recovered.",
+                level="success",
+                kind="ttl",
+                ttl_ms=8000,
+                key="hindsight.retain.recovered",
+            ))
 
     def _register_atexit(self) -> None:
         """Register an idempotent atexit hook to drain the writer.
@@ -1643,6 +1678,8 @@ class HindsightMemoryProvider(MemoryProvider):
         _status_cb = kwargs.get("status_callback")
         if callable(_status_cb):
             self._status_callback = _status_cb
+        self._notice_callback = kwargs.get("notice_callback")
+        self._notice_clear_callback = kwargs.get("notice_clear_callback")
 
         # Each process lifecycle gets its own document_id. Reusing session_id
         # alone caused overwrites on /resume — the reloaded session starts
@@ -2438,8 +2475,10 @@ class HindsightMemoryProvider(MemoryProvider):
                             retain_async=self._retain_async,
                         )
                     )
-                except Exception as e:
-                    logger.warning("Hindsight flush-on-switch failed: %s", e, exc_info=True)
+                except Exception:
+                    # The writer owns failure reporting and must see this error;
+                    # swallowing it would fabricate a retain recovery event.
+                    raise
 
             # Route the flush through the same writer queue sync_turn
             # uses. That serializes it behind any still-queued retains

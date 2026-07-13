@@ -1977,6 +1977,11 @@ def init_agent(
                     if _init_kwargs["platform"] == "cli":
                         _init_kwargs["warning_callback"] = agent._emit_warning
                         _init_kwargs["status_callback"] = agent._emit_status
+                    # Retain writes complete after the user-facing response. Give
+                    # memory providers the durable notice rail rather than leaving
+                    # failures stranded in a background-worker log.
+                    _init_kwargs["notice_callback"] = agent._emit_notice
+                    _init_kwargs["notice_clear_callback"] = agent._emit_notice_clear
                     # Thread session title for memory provider scoping
                     # (e.g. honcho uses this to derive chat-scoped session keys)
                     if agent._session_db:

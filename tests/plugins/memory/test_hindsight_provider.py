@@ -1099,6 +1099,73 @@ class TestShutdownRace:
         assert provider._retain_queue.empty()
 
 
+class TestRetainFailureNotices:
+    def test_retain_failure_notifies_once_and_success_reports_recovery(self, provider):
+        notices = []
+        cleared = []
+        provider._notice_callback = notices.append
+        provider._notice_clear_callback = cleared.append
+
+        provider._emit_retain_failure_notice(RuntimeError("upstream auth rejected"))
+        provider._emit_retain_failure_notice(RuntimeError("upstream auth rejected again"))
+
+        assert len(notices) == 1
+        assert notices[0].level == "error"
+        assert notices[0].key == "hindsight.retain"
+        assert "memory writes failed" in notices[0].text
+
+        provider._emit_retain_success_notice()
+
+        assert cleared == ["hindsight.retain"]
+        assert len(notices) == 2
+        assert notices[1].level == "success"
+        assert "memory writes recovered" in notices[1].text
+
+    def test_writer_emits_notice_when_automatic_retain_raises(self, provider):
+        notices = []
+        provider._notice_callback = notices.append
+        provider._client.aretain_batch.side_effect = RuntimeError("Hindsight unavailable")
+
+        provider.sync_turn("hello", "hi")
+        provider._retain_queue.join()
+        provider.shutdown()
+
+        assert len(notices) == 1
+        assert notices[0].level == "error"
+        assert notices[0].key == "hindsight.retain"
+        assert notices[0].text == "✕ Hindsight memory writes failed. Check Hermes logs."
+
+    def test_failed_switch_flush_stays_failed_until_a_real_retain_succeeds(
+        self, provider_with_config
+    ):
+        provider = provider_with_config(retain_every_n_turns=3, retain_async=False)
+        notices = []
+        cleared = []
+        provider._notice_callback = notices.append
+        provider._notice_clear_callback = cleared.append
+        provider._client.aretain_batch.side_effect = RuntimeError("Hindsight unavailable")
+
+        # Buffer turns, then force the session-switch flush to fail.
+        provider.sync_turn("turn1", "reply1")
+        provider.sync_turn("turn2", "reply2")
+        provider.on_session_switch("new-session")
+        provider._retain_queue.join()
+
+        assert [notice.level for notice in notices] == ["error"]
+        assert cleared == []
+
+        # A subsequent successful retain is the only event that may recover.
+        provider._client.aretain_batch.side_effect = None
+        provider.sync_turn("turn3", "reply3")
+        provider.sync_turn("turn4", "reply4")
+        provider.sync_turn("turn5", "reply5")
+        provider._retain_queue.join()
+        provider.shutdown()
+
+        assert cleared == ["hindsight.retain"]
+        assert [notice.level for notice in notices] == ["error", "success"]
+
+
 # ---------------------------------------------------------------------------
 # on_session_switch — flush + prefetch reset behavior
 # ---------------------------------------------------------------------------
