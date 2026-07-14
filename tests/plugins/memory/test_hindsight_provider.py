@@ -264,6 +264,7 @@ class TestConfig:
         assert provider._retain_every_n_turns == 1
         assert provider._recall_max_tokens == 4096
         assert provider._recall_max_input_chars == 800
+        assert provider._recall_min_input_chars == 0
         assert provider._tags is None
         assert provider._observation_scopes is None
         assert provider._recall_tags is None
@@ -302,6 +303,7 @@ class TestConfig:
             recall_types=["world", "experience"],
             recall_prompt_preamble="Custom preamble:",
             recall_max_input_chars=500,
+            recall_min_input_chars=20,
             bank_mission="Test agent mission",
         )
         assert p._tags == ["tag1", "tag2"]
@@ -320,6 +322,7 @@ class TestConfig:
         assert p._recall_types == ["world", "experience"]
         assert p._recall_prompt_preamble == "Custom preamble:"
         assert p._recall_max_input_chars == 500
+        assert p._recall_min_input_chars == 20
         assert p._bank_mission == "Test agent mission"
 
     def test_retain_source_defaults_empty(self, provider):
@@ -594,6 +597,42 @@ class TestPrefetch:
         result = provider.prefetch("a totally different current query")
         assert "buffered from previous turn" in result
         provider._client.arecall.assert_not_called()
+
+    def test_prefetch_short_query_discards_stale_cached_context(self, provider_with_config):
+        p = provider_with_config(recall_min_input_chars=20)
+        p._prefetch_result = "- stale memory from the previous query"
+
+        assert p.prefetch("thanks") == ""
+        assert p._prefetch_result == ""
+        p._client.arecall.assert_not_called()
+
+    def test_queue_prefetch_skips_short_query(self, provider_with_config):
+        p = provider_with_config(recall_min_input_chars=20)
+
+        p.queue_prefetch("thanks")
+
+        assert p._prefetch_thread is None
+        p._client.arecall.assert_not_called()
+
+    def test_short_query_invalidates_inflight_prefetch(self, provider_with_config):
+        p = provider_with_config(recall_min_input_chars=20)
+        started = threading.Event()
+        release = threading.Event()
+
+        async def _delayed_recall(**_kwargs):
+            started.set()
+            assert release.wait(timeout=5)
+            return SimpleNamespace(results=[SimpleNamespace(text="Stale memory")])
+
+        p._client.arecall = AsyncMock(side_effect=_delayed_recall)
+        p.queue_prefetch("previous detailed question")
+        assert started.wait(timeout=2)
+
+        assert p.prefetch("thanks") == ""
+        release.set()
+        p._prefetch_thread.join(timeout=5)
+
+        assert p._prefetch_result == ""
 
     def test_queue_prefetch_skipped_in_tools_mode(self, provider_with_config):
         p = provider_with_config(memory_mode="tools")
@@ -1393,7 +1432,7 @@ class TestConfigSchema:
             "recall_tags", "recall_tags_match",
             "auto_recall", "auto_retain",
             "retain_every_n_turns", "retain_async", "retain_context",
-            "recall_max_tokens", "recall_max_input_chars",
+            "recall_max_tokens", "recall_max_input_chars", "recall_min_input_chars",
             "recall_prompt_preamble",
         }
         assert expected_keys.issubset(keys), f"Missing: {expected_keys - keys}"

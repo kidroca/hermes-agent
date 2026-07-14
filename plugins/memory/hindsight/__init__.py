@@ -838,6 +838,7 @@ class HindsightMemoryProvider(MemoryProvider):
         self._prefetch_count = 0
         self._prefetch_lock = threading.Lock()
         self._prefetch_thread = None
+        self._prefetch_generation = 0
         # State for the model-independent recall indicator (see recall_status()).
         # _last_recall_returned tracks whether the most recent prefetch() handed
         # any memory to the agent this turn; _last_recall_count is how many.
@@ -925,6 +926,9 @@ class HindsightMemoryProvider(MemoryProvider):
         self._recall_types: list[str] = ["observation"]
         self._recall_prompt_preamble = ""
         self._recall_max_input_chars = 800
+        # Zero preserves legacy behavior; positive values suppress automatic
+        # recall for short conversational acknowledgements/follow-ups.
+        self._recall_min_input_chars = 0
 
         # Bank
         self._bank_mission = ""
@@ -1271,6 +1275,7 @@ class HindsightMemoryProvider(MemoryProvider):
             {"key": "retain_context", "description": "Context label for retained memories", "default": "conversation between Hermes Agent and the User"},
             {"key": "recall_max_tokens", "description": "Maximum tokens for recall results", "default": 4096},
             {"key": "recall_max_input_chars", "description": "Maximum input query length for auto-recall", "default": 800},
+            {"key": "recall_min_input_chars", "description": "Minimum stripped query length for auto-recall; shorter queries inject no recalled context and discard stale prefetched context (0 disables)", "default": 0},
             {"key": "recall_prompt_preamble", "description": "Custom preamble for recalled memories in context"},
             {"key": "timeout", "description": "API request timeout in seconds", "default": _DEFAULT_TIMEOUT},
             {"key": "idle_timeout", "description": "Embedded daemon idle timeout in seconds (0 disables auto-shutdown)", "default": _DEFAULT_IDLE_TIMEOUT, "when": {"mode": "local_embedded"}},
@@ -1833,6 +1838,7 @@ class HindsightMemoryProvider(MemoryProvider):
         # when a turn is dispatched to the writer. Same off switch rationale.
         self._retain_indicator = bool(self._config.get("retain_indicator", True))
         self._recall_max_input_chars = int(self._config.get("recall_max_input_chars", 800))
+        self._recall_min_input_chars = max(0, int(self._config.get("recall_min_input_chars", 0)))
         self._retain_async = self._config.get("retain_async", True)
         self._prefetch_waits_for_retain = self._config.get("prefetch_waits_for_retain", True)
         self._prefetch_retain_drain_timeout = float(
@@ -1954,6 +1960,22 @@ class HindsightMemoryProvider(MemoryProvider):
             f"hindsight_retain to store facts."
         )
 
+    def _skip_short_auto_recall(self, query: str) -> bool:
+        """Discard stale prefetches rather than injecting them for a short query."""
+        stripped_len = len(query.strip())
+        if not self._recall_min_input_chars or stripped_len >= self._recall_min_input_chars:
+            return False
+        with self._prefetch_lock:
+            self._prefetch_generation += 1
+            self._prefetch_result = ""
+            self._prefetch_count = 0
+        logger.debug(
+            "Prefetch: skipped and discarded cached context (query_len=%d < min=%d)",
+            stripped_len,
+            self._recall_min_input_chars,
+        )
+        return True
+
     def _recall_disabled(self) -> bool:
         """Guards shared by the async and synchronous recall paths."""
         if self._memory_mode == "tools":
@@ -2030,6 +2052,9 @@ class HindsightMemoryProvider(MemoryProvider):
         self._last_recall_count = count if returned else 0
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
+        if self._skip_short_auto_recall(query):
+            self._record_recall_indicator(returned=False, count=0)
+            return ""
         # Opt-in: recall synchronously against the *current* message so the
         # injected memories match this turn's query rather than the previous
         # turn's queued recall. See NousResearch/hermes-agent#5820.
@@ -2072,6 +2097,15 @@ class HindsightMemoryProvider(MemoryProvider):
             return
         if self._recall_disabled():
             return
+        if self._skip_short_auto_recall(query):
+            return
+        if self._recall_max_input_chars and len(query) > self._recall_max_input_chars:
+            query = query[:self._recall_max_input_chars]
+        with self._prefetch_lock:
+            self._prefetch_generation += 1
+            generation = self._prefetch_generation
+            self._prefetch_result = ""
+            self._prefetch_count = 0
 
         def _run():
             # Ensure the just-completed turn's retain is recall-visible on the
@@ -2086,8 +2120,11 @@ class HindsightMemoryProvider(MemoryProvider):
             recalled = self._do_recall(query)
             if recalled.text:
                 with self._prefetch_lock:
-                    self._prefetch_result = recalled.text
-                    self._prefetch_count = recalled.count
+                    if generation == self._prefetch_generation:
+                        self._prefetch_result = recalled.text
+                        self._prefetch_count = recalled.count
+                    else:
+                        logger.debug("Prefetch: discarded superseded recall result")
 
         self._prefetch_thread = threading.Thread(
             target=contextvars.copy_context().run,
