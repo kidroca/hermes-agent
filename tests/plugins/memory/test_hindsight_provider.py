@@ -249,6 +249,98 @@ class TestSchemas:
 
 
 # ---------------------------------------------------------------------------
+# Bank mission sync tests
+# ---------------------------------------------------------------------------
+
+
+class TestBankMissionSync:
+    def test_configured_missions_update_drifted_bank_values(self, provider_with_config):
+        p = provider_with_config(
+            bank_mission="Recall durable shared context.",
+            bank_retain_mission="Keep only durable facts.",
+        )
+        p._client.banks.get_bank_config = AsyncMock(
+            return_value=SimpleNamespace(config={
+                "reflect_mission": None,
+                "retain_mission": "Old extraction policy.",
+            })
+        )
+        p._client.banks.update_bank_config = AsyncMock()
+
+        p._sync_bank_missions(p._client)
+
+        p._client.banks.get_bank_config.assert_awaited_once_with("test-bank")
+        p._client.banks.update_bank_config.assert_awaited_once()
+        update = p._client.banks.update_bank_config.await_args.args[1]
+        assert update.updates == {
+            "reflect_mission": "Recall durable shared context.",
+            "retain_mission": "Keep only durable facts.",
+        }
+
+    def test_bank_config_model_is_normalized_before_comparing_missions(
+        self, provider_with_config
+    ):
+        p = provider_with_config(
+            bank_mission="Recall durable shared context.",
+            bank_retain_mission="Keep only durable facts.",
+        )
+        p._client.banks.get_bank_config = AsyncMock(
+            return_value=SimpleNamespace(config=SimpleNamespace(
+                reflect_mission=None,
+                retain_mission="Old extraction policy.",
+            ))
+        )
+        p._client.banks.update_bank_config = AsyncMock()
+
+        p._sync_bank_missions(p._client)
+
+        update = p._client.banks.update_bank_config.await_args.args[1]
+        assert update.updates == {
+            "reflect_mission": "Recall durable shared context.",
+            "retain_mission": "Keep only durable facts.",
+        }
+
+    def test_matching_missions_skip_bank_update(self, provider_with_config):
+        p = provider_with_config(
+            bank_mission="Recall durable shared context.",
+            bank_retain_mission="Keep only durable facts.",
+        )
+        p._client.banks.get_bank_config = AsyncMock(
+            return_value=SimpleNamespace(config={
+                "reflect_mission": "Recall durable shared context.",
+                "retain_mission": "Keep only durable facts.",
+            })
+        )
+        p._client.banks.update_bank_config = AsyncMock()
+
+        p._sync_bank_missions(p._client)
+
+        p._client.banks.update_bank_config.assert_not_awaited()
+
+    def test_empty_missions_skip_bank_config_api(self, provider_with_config):
+        p = provider_with_config()
+        p._client.banks.get_bank_config = AsyncMock()
+
+        p._sync_bank_missions(p._client)
+
+        p._client.banks.get_bank_config.assert_not_awaited()
+
+    def test_mission_sync_failure_does_not_block_memory_operation(self, provider_with_config):
+        p = provider_with_config(bank_mission="Recall durable shared context.")
+        p._client.banks.get_bank_config = AsyncMock(
+            side_effect=RuntimeError("bank config endpoint unavailable")
+        )
+
+        result = p._run_hindsight_operation(
+            lambda client: client.aretain("test-bank", "Durable content")
+        )
+
+        assert result.ok is True
+        assert p._bank_missions_synced is False
+        p._client.aretain.assert_awaited_once_with("test-bank", "Durable content")
+
+
+# ---------------------------------------------------------------------------
 # Config tests
 # ---------------------------------------------------------------------------
 

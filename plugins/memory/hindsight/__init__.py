@@ -934,6 +934,8 @@ class HindsightMemoryProvider(MemoryProvider):
         self._bank_mission = ""
         self._bank_retain_mission: str | None = None
         self._bank_id_template = ""
+        self._bank_missions_synced = False
+        self._bank_mission_sync_error_logged = False
 
     @property
     def name(self) -> str:
@@ -1624,9 +1626,69 @@ class HindsightMemoryProvider(MemoryProvider):
         except Exception as exc:
             logger.debug("Hindsight atexit shutdown failed: %s", exc)
 
+    def _sync_bank_missions(self, client) -> None:
+        """Synchronize nonempty configured missions to the bank when they drift.
+
+        Missions are bank-global Hindsight settings. Blank config intentionally
+        leaves the corresponding remote mission unmanaged rather than clearing
+        it. Failed attempts retry only on later real memory operations; the
+        warning itself is emitted once until synchronization succeeds.
+        """
+        if self._bank_missions_synced or not (
+            self._bank_mission or self._bank_retain_mission
+        ):
+            return
+        try:
+            response = self._run_sync(client.banks.get_bank_config(self._bank_id))
+            config = getattr(response, "config", None)
+            if config is None and isinstance(response, dict):
+                config = response.get("config")
+            config = config or {}
+
+            def config_value(key: str):
+                if isinstance(config, dict):
+                    return config.get(key)
+                return getattr(config, key, None)
+
+            updates = {}
+            if (
+                self._bank_mission
+                and config_value("reflect_mission") != self._bank_mission
+            ):
+                updates["reflect_mission"] = self._bank_mission
+            if (
+                self._bank_retain_mission
+                and config_value("retain_mission") != self._bank_retain_mission
+            ):
+                updates["retain_mission"] = self._bank_retain_mission
+            if updates:
+                from hindsight_client_api.models.bank_config_update import BankConfigUpdate
+
+                self._run_sync(
+                    client.banks.update_bank_config(
+                        self._bank_id, BankConfigUpdate(updates=updates)
+                    )
+                )
+                logger.info(
+                    "Hindsight bank missions synchronized for bank=%s: %s",
+                    self._bank_id,
+                    ", ".join(updates),
+                )
+            self._bank_missions_synced = True
+            self._bank_mission_sync_error_logged = False
+        except Exception as exc:
+            if not self._bank_mission_sync_error_logged:
+                logger.warning(
+                    "Hindsight bank mission synchronization failed for bank=%s: %s",
+                    self._bank_id,
+                    exc,
+                )
+                self._bank_mission_sync_error_logged = True
+
     def _run_hindsight_operation(self, operation):
         """Run an async Hindsight client operation, retrying once after idle shutdown."""
         client = self._get_client()
+        self._sync_bank_missions(client)
         try:
             return self._run_sync(operation(client))
         except Exception as exc:
