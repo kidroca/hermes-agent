@@ -690,11 +690,13 @@ class TestPrefetch:
         assert "buffered from previous turn" in result
         provider._client.arecall.assert_not_called()
 
-    def test_prefetch_short_query_discards_stale_cached_context(self, provider_with_config):
+    def test_prefetch_short_query_consumes_previous_turn_cached_context(self, provider_with_config):
         p = provider_with_config(recall_min_input_chars=20)
-        p._prefetch_result = "- stale memory from the previous query"
+        p._prefetch_result = "- memory prefetched for the previous detailed query"
 
-        assert p.prefetch("thanks") == ""
+        result = p.prefetch("thanks")
+
+        assert "memory prefetched for the previous detailed query" in result
         assert p._prefetch_result == ""
         p._client.arecall.assert_not_called()
 
@@ -706,7 +708,7 @@ class TestPrefetch:
         assert p._prefetch_thread is None
         p._client.arecall.assert_not_called()
 
-    def test_short_query_invalidates_inflight_prefetch(self, provider_with_config):
+    def test_short_query_consumes_inflight_previous_turn_prefetch(self, provider_with_config):
         p = provider_with_config(recall_min_input_chars=20)
         started = threading.Event()
         release = threading.Event()
@@ -720,11 +722,37 @@ class TestPrefetch:
         p.queue_prefetch("previous detailed question")
         assert started.wait(timeout=2)
 
-        assert p.prefetch("thanks") == ""
+        threading.Timer(0.01, release.set).start()
+        result = p.prefetch("thanks")
+        p._prefetch_thread.join(timeout=5)
+
+        assert "Stale memory" in result
+        assert p._client.arecall.call_args.kwargs["query"] == "previous detailed question"
+        assert p._prefetch_result == ""
+
+    def test_short_query_does_not_cancel_slow_previous_turn_prefetch(self, provider_with_config):
+        p = provider_with_config(recall_min_input_chars=20)
+        started = threading.Event()
+        release = threading.Event()
+
+        async def _delayed_recall(**_kwargs):
+            started.set()
+            assert release.wait(timeout=5)
+            return SimpleNamespace(results=[SimpleNamespace(text="Previous turn memory")])
+
+        p._client.arecall = AsyncMock(side_effect=_delayed_recall)
+        p.queue_prefetch("previous detailed question")
+        assert started.wait(timeout=2)
+
+        # This acknowledgement arrives after the prefetch wait expires. It
+        # cannot inject context yet, but must not cancel the prior recall.
+        assert p.prefetch("ok") == ""
+        p.queue_prefetch("ok")
         release.set()
         p._prefetch_thread.join(timeout=5)
 
-        assert p._prefetch_result == ""
+        assert p._prefetch_result == "- Previous turn memory"
+        assert p._client.arecall.call_args.kwargs["query"] == "previous detailed question"
 
     def test_queue_prefetch_skipped_in_tools_mode(self, provider_with_config):
         p = provider_with_config(memory_mode="tools")

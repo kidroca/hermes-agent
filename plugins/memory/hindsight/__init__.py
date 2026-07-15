@@ -1277,7 +1277,7 @@ class HindsightMemoryProvider(MemoryProvider):
             {"key": "retain_context", "description": "Context label for retained memories", "default": "conversation between Hermes Agent and the User"},
             {"key": "recall_max_tokens", "description": "Maximum tokens for recall results", "default": 4096},
             {"key": "recall_max_input_chars", "description": "Maximum input query length for auto-recall", "default": 800},
-            {"key": "recall_min_input_chars", "description": "Minimum stripped query length for auto-recall; shorter queries inject no recalled context and discard stale prefetched context (0 disables)", "default": 0},
+            {"key": "recall_min_input_chars", "description": "Minimum stripped query length that starts an auto-recall query (0 disables)", "default": 0},
             {"key": "recall_prompt_preamble", "description": "Custom preamble for recalled memories in context"},
             {"key": "timeout", "description": "API request timeout in seconds", "default": _DEFAULT_TIMEOUT},
             {"key": "idle_timeout", "description": "Embedded daemon idle timeout in seconds (0 disables auto-shutdown)", "default": _DEFAULT_IDLE_TIMEOUT, "when": {"mode": "local_embedded"}},
@@ -2023,16 +2023,18 @@ class HindsightMemoryProvider(MemoryProvider):
         )
 
     def _skip_short_auto_recall(self, query: str) -> bool:
-        """Discard stale prefetches rather than injecting them for a short query."""
+        """Skip starting a recall query for a short user message.
+
+        A completed prefetch belongs to the *previous* user turn and must be
+        consumed even when this turn is a terse acknowledgement. This helper
+        is therefore only called from ``queue_prefetch()``, where a new query
+        would otherwise be started.
+        """
         stripped_len = len(query.strip())
         if not self._recall_min_input_chars or stripped_len >= self._recall_min_input_chars:
             return False
-        with self._prefetch_lock:
-            self._prefetch_generation += 1
-            self._prefetch_result = ""
-            self._prefetch_count = 0
         logger.debug(
-            "Prefetch: skipped and discarded cached context (query_len=%d < min=%d)",
+            "Prefetch: skipped short recall query (query_len=%d < min=%d)",
             stripped_len,
             self._recall_min_input_chars,
         )
@@ -2114,9 +2116,6 @@ class HindsightMemoryProvider(MemoryProvider):
         self._last_recall_count = count if returned else 0
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
-        if self._skip_short_auto_recall(query):
-            self._record_recall_indicator(returned=False, count=0)
-            return ""
         # Opt-in: recall synchronously against the *current* message so the
         # injected memories match this turn's query rather than the previous
         # turn's queued recall. See NousResearch/hermes-agent#5820.
