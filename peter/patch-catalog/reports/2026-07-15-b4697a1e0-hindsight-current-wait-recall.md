@@ -1,17 +1,19 @@
-# Add current-turn Hindsight recall strategy
+# Add current-turn Hindsight recall strategy (historical setting names)
 
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
 - Patch ref: `b4697a1e0fb5d72f8f3fccffdcc80b3f08c4e135`
 - Branch: `peter/hermes-patches`
-- Local status: committed patch inspected; this catalogue pass changes only `peter/patch-catalog/` documentation.
+- Local status: committed patch inspected. Its original public settings were renamed by successor `2145e9a9b`; this report preserves the original names only as historical context.
 - Motivation: offer a deliberate current-message recall path that waits before prompt construction, while retaining the established asynchronous prior-turn warming lifecycle as the default. Avoid stale prior-turn cache use in the current-turn mode, preserve short/empty gates, and make malformed wait configuration safe.
 - Changed files: `plugins/memory/hindsight/__init__.py`; `tests/plugins/memory/test_hindsight_provider.py`.
 - Tests / verification: provided post-commit verification: `/opt/hermes-agent/venv/bin/python -m pytest tests/plugins/memory -q -o 'addopts='` — **487 passed**. Final independent review found no blockers.
 
 ## Local patch summary
 
-`recall_prefetch_strategy` now defaults to `previous`, preserving the end-of-turn warmup for next-turn injection. Selecting `current_wait` suppresses `queue_prefetch()` warmup and runs recall against the current user message during `prefetch()`, waiting up to `recall_current_wait_seconds` (default 30 seconds) before prompt construction.
+> **Historical terminology:** this patch originally introduced `recall_prefetch_strategy: previous|current_wait` and `recall_current_wait_seconds`. Successor `2145e9a9b` renamed the current public configuration to `recall_query_turn: previous_async|current_sync` and `recall_query_wait_seconds`, while retaining the old keys as read aliases. References to the original names below describe the `b4697a1e0` diff, not the recommended current configuration.
+
+`recall_prefetch_strategy` originally defaulted to `previous`, preserving the end-of-turn warmup for next-turn injection. Selecting `current_wait` suppressed `queue_prefetch()` warmup and ran recall against the current user message during `prefetch()`, waiting up to `recall_current_wait_seconds` (default 30 seconds) before prompt construction. Those semantics are now exposed as `recall_query_turn: previous_async|current_sync` with `recall_query_wait_seconds`.
 
 The current-wait path honors tools-only, disabled-auto-recall, shutdown, empty-query, and minimum-input-length gates. It begins a fresh worker, clears any prior result before that work, and only formats a result produced for the current request; it never falls back to a stale previous-turn cache. Invalid/missing/non-numeric wait settings safely use 30 seconds (negative values clamp to zero). Coverage includes defaults/config/schema, malformed wait values, latest-query selection rather than cache reuse, warmup suppression, and empty/short query suppression.
 
@@ -34,7 +36,7 @@ The current-wait path honors tools-only, disabled-auto-recall, shutdown, empty-q
 
 ## Recommendation
 
-Keep `b4697a1e0` locally. Upstream overlap is **very high** in the Hindsight prefetch/current-turn-recall area, but no reviewed upstream change replaces this narrowly scoped strategy. During rebase, first compare against #62687 and #64745; retain the default `previous` compatibility contract, `current_wait` warmup suppression, strict current-result-only behavior, query gates, and safe malformed-wait fallback unless upstream demonstrably covers each one. Re-run the complete Hindsight memory suite after any merge touching `prefetch()`, `queue_prefetch()`, `_prefetch_result`, or prefetch configuration.
+Keep `b4697a1e0` locally as the historical behavior-introducing patch, with public nomenclature superseded by `2145e9a9b`. Upstream overlap is **very high** in the Hindsight prefetch/current-turn-recall area, but no reviewed upstream change replaces this narrowly scoped strategy. During rebase, first compare against #62687 and #64745; retain the default `previous_async` compatibility contract, `current_sync` warmup suppression, strict current-result-only behavior, query gates, and safe malformed-wait fallback unless upstream demonstrably covers each one. Re-run the complete Hindsight memory suite after any merge touching `prefetch()`, `queue_prefetch()`, `_prefetch_result`, or recall query-timing configuration.
 
 ## Raw search queries used
 
