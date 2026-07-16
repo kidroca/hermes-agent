@@ -298,11 +298,9 @@ class SSHEnvironment(BaseEnvironment):
                 "-C", staging, "-T", manifest_path,
             ]
             ssh_cmd = self._build_ssh_command()
-            # --no-overwrite-dir prevents tar from overwriting the mode of
-            # existing directories (e.g. /home/<user>) with the staging
-            # directory's mode.  Without this, a umask 002 produces 0775
-            # dirs which breaks sshd StrictModes (refuses authorized_keys).
-            ssh_cmd.append(f"tar xf - --no-overwrite-dir -C {shlex.quote(base)}")
+            # The archive contains explicit file entries only, so portable
+            # extraction cannot overwrite metadata of existing parent dirs (#17767).
+            ssh_cmd.append(f"tar xf - -C {shlex.quote(base)}")
 
             # Preserve the caller's environment for the local tar process while
             # routing through the shared spawn-env guard. SSH sync may need

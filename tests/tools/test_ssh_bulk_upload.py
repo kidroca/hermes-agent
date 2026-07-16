@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -178,10 +179,28 @@ class TestSSHBulkUpload:
             (str(f2), "/home/testuser/.hermes/skills/y.txt"),
         ]
         tar_calls = []
+        tar_members = []
+        ssh_commands = []
+        real_popen = subprocess.Popen
 
         def capture_popen(cmd, **kwargs):
             if cmd[0] == "tar":
                 manifest_path = cmd[cmd.index("-T") + 1]
+                archive_path = tmp_path / "payload.tar"
+                archive_cmd = list(cmd)
+                archive_cmd[archive_cmd.index("-")] = str(archive_path)
+                archive_proc = real_popen(
+                    archive_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=kwargs.get("env"),
+                )
+                _, archive_stderr = archive_proc.communicate()
+                assert archive_proc.returncode == 0, archive_stderr.decode()
+                with tarfile.open(archive_path) as archive:
+                    tar_members.extend(
+                        (member.name, member.isfile()) for member in archive.getmembers()
+                    )
                 tar_calls.append(
                     {
                         "cmd": cmd,
@@ -189,6 +208,8 @@ class TestSSHBulkUpload:
                         "manifest": Path(manifest_path).read_text(),
                     }
                 )
+            else:
+                ssh_commands.append(cmd)
             return _mock_proc()
 
         with patch.object(subprocess, "run",
@@ -205,6 +226,12 @@ class TestSSHBulkUpload:
             "cache/x.txt",
             "skills/y.txt",
         ]
+        assert tar_members == [
+            ("cache/x.txt", True),
+            ("skills/y.txt", True),
+        ]
+        assert ssh_commands[0][-1] == "tar xf - -C /home/testuser/.hermes"
+        assert "--no-overwrite-dir" not in " ".join(ssh_commands[0])
 
 
     def test_timeout_kills_both_processes(self, mock_env, tmp_path):
