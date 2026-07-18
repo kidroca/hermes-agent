@@ -87,6 +87,25 @@ class TestBuildToolPreview:
 
 
 
+    def test_hindsight_retain_preview_uses_existing_content(self):
+        content = "Peter prefers explicit, auditable Hindsight retention."
+        assert build_tool_preview("hindsight_retain", {"content": content}) == content
+
+    def test_hindsight_retain_preview_redacts_recognized_secrets(self):
+        secret = "ghp_" + "A" * 36
+        result = build_tool_preview(
+            "hindsight_retain",
+            {"content": f"Peter configured token {secret} for a service."},
+        )
+        assert result is not None
+        assert secret not in result
+        assert "ghp_" in result
+
+    def test_hindsight_retain_tool_label_shows_existing_content(self):
+        from agent.display import build_tool_label
+
+        content = "Peter prefers explicit Hindsight retention."
+        assert build_tool_label("hindsight_retain", {"content": content}) == content
 
 
 

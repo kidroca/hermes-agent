@@ -400,16 +400,21 @@ def redact_browser_typed_text_for_display(value: Any, typed_text: Any) -> Any:
 def redact_tool_args_for_display(tool_name: str, args: dict | None) -> dict | None:
     """Return a copy of tool args safe for logs/progress UI.
 
-    For ``browser_type`` the ``text`` argument is run through the same
-    secret-pattern redactor used for logs.  Recognizable credentials (API
-    keys, tokens) are masked before the value reaches tool progress
-    notifications; normal typed text is left intact for debuggability.
+    Displayed free-text arguments for ``browser_type`` and ``hindsight_retain``
+    are run through the same secret-pattern redactor used for logs.
+    Recognizable credentials (API keys, tokens) are masked before the value
+    reaches tool progress notifications; normal text is left intact for
+    debuggability.
     """
     if not isinstance(args, dict):
         return args
     if tool_name == "browser_type" and isinstance(args.get("text"), str):
         safe_args = dict(args)
         safe_args["text"] = redact_sensitive_text(args["text"], force=True)
+        return safe_args
+    if tool_name == "hindsight_retain" and isinstance(args.get("content"), str):
+        safe_args = dict(args)
+        safe_args["content"] = redact_sensitive_text(args["content"], force=True)
         return safe_args
     return args
 
@@ -460,7 +465,7 @@ def build_tool_preview(tool_name: str, args: dict, max_len: int | None = None) -
         "search_files": "pattern", "browser_navigate": "url",
         "browser_click": "ref", "browser_type": "text",
         "image_generate": "prompt", "text_to_speech": "text",
-        "vision_analyze": "question",
+        "vision_analyze": "question", "hindsight_retain": "content",
         "skill_view": "name", "skills_list": "category",
         "cronjob_manage": "action",
         "execute_code": "code", "browser_exec": "code", "delegate_task": "goal",
