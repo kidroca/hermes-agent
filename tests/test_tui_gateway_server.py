@@ -1677,6 +1677,75 @@ def test_tui_verbose_default_cap_stays_small(monkeypatch):
     assert capped.startswith("[showing verbose tail; omitted ")
 
 
+def test_tool_ctx_uses_session_profile_preview_length(tmp_path, monkeypatch):
+    import yaml
+
+    launch_home = tmp_path / "launch"
+    profile_home = tmp_path / "profile"
+    launch_home.mkdir()
+    profile_home.mkdir()
+    (launch_home / "config.yaml").write_text(
+        yaml.safe_dump({"display": {"tool_preview_length": 24}}),
+        encoding="utf-8",
+    )
+    (profile_home / "config.yaml").write_text(
+        yaml.safe_dump({"display": {"tool_preview_length": 120}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(server, "_hermes_home", launch_home)
+    monkeypatch.setattr(server, "_cfg_cache", None)
+    monkeypatch.setattr(server, "_cfg_mtime", None)
+    monkeypatch.setattr(server, "_cfg_path", None)
+    monkeypatch.setitem(server._sessions, "profile-preview", {"profile_home": str(profile_home)})
+
+    command = "x" * 100
+
+    profile_preview = server._tool_ctx("terminal", {"command": command}, sid="profile-preview")
+    launch_preview = server._tool_ctx("terminal", {"command": command})
+
+    assert command in profile_preview
+    assert command not in launch_preview
+
+
+def test_tool_ctx_treats_zero_preview_length_as_unlimited(tmp_path, monkeypatch):
+    import yaml
+
+    (tmp_path / "config.yaml").write_text(
+        yaml.safe_dump({"display": {"tool_preview_length": 0}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(server, "_hermes_home", tmp_path)
+    monkeypatch.setattr(server, "_cfg_cache", None)
+    monkeypatch.setattr(server, "_cfg_mtime", None)
+    monkeypatch.setattr(server, "_cfg_path", None)
+
+    command = "x" * 160
+
+    assert command in server._tool_ctx("terminal", {"command": command})
+
+
+def test_tool_start_emits_configured_preview_budget(monkeypatch):
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(server, "_emit", lambda kind, sid, payload: events.append((kind, sid, payload)))
+    monkeypatch.setattr(server, "_session_tool_preview_length", lambda _sid=None: 120)
+    monkeypatch.setitem(
+        server._sessions,
+        "preview-budget",
+        {"tool_progress_mode": "all", "tool_started_at": {}},
+    )
+
+    server._on_tool_start(
+        "preview-budget",
+        "tool-1",
+        "hindsight_retain",
+        {"content": "x" * 200},
+    )
+
+    assert events[0][:2] == ("tool.start", "preview-budget")
+    assert events[0][2]["preview_max_len"] == 120
+    assert len(events[0][2]["context"]) == 120
+
+
 def test_tui_verbose_tool_events_omit_details_when_redaction_fails(monkeypatch):
     redact_module = types.ModuleType("agent.redact")
 
@@ -2827,7 +2896,8 @@ def test_load_enabled_toolsets_reports_disabled_mcp_separately(monkeypatch, caps
     assert "mcp-off" in err
 
 
-def test_history_to_messages_preserves_tool_calls_for_resume_display():
+def test_history_to_messages_preserves_tool_calls_for_resume_display(monkeypatch):
+    monkeypatch.setattr(server, "_session_tool_preview_length", lambda _sid=None: 0)
     history = [
         {"role": "user", "content": "first prompt"},
         {
@@ -2854,6 +2924,7 @@ def test_history_to_messages_preserves_tool_calls_for_resume_display():
             "args": {"pattern": "resume"},
             "context": "resume",
             "name": "search_files",
+            "preview_max_len": 0,
             "role": "tool",
         },
         {"role": "assistant", "text": "first answer"},

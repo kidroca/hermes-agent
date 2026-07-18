@@ -29,13 +29,21 @@ export const toTranscriptMessages = (rows: unknown): Msg[] => {
       continue
     }
 
-    const { context, display_kind, name, role, text, timestamp } = row as TranscriptRow
+    const {
+      context,
+      display_kind,
+      name,
+      preview_max_len: previewMaxLength,
+      role,
+      text,
+      timestamp
+    } = row as TranscriptRow
 
     const createdAt =
       typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0 ? timestamp : undefined
 
     if (role === 'tool') {
-      pending.push(buildToolTrailLine(name ?? 'tool', context ?? ''))
+      pending.push(buildToolTrailLine(name ?? 'tool', context ?? '', false, '', undefined, previewMaxLength))
 
       continue
     }
@@ -112,6 +120,7 @@ interface TranscriptRow {
   display_kind?: string
   display_metadata?: { task_count?: number; [key: string]: unknown }
   name?: string
+  preview_max_len?: number
   role?: string
   text?: string
   timestamp?: number

@@ -2,6 +2,7 @@ export interface ActiveTool {
   context?: string
   id: string
   name: string
+  previewMaxLength?: number
   verboseArgs?: string
   startedAt?: number
 }

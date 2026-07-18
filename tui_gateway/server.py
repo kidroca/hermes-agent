@@ -7948,7 +7948,31 @@ def _session_info(agent, session: dict | None = None) -> dict:
     return info
 
 
-def _tool_ctx(name: str, args: dict) -> str:
+def _session_tool_preview_length(sid: str | None = None) -> int:
+    """Resolve the tool preview budget from this session's profile config."""
+    profile_home = _sessions.get(sid, {}).get("profile_home") if sid else None
+    token = set_hermes_home_override(profile_home) if profile_home else None
+    try:
+        cfg = _load_cfg()
+    finally:
+        if token is not None:
+            reset_hermes_home_override(token)
+
+    display = cfg.get("display") if isinstance(cfg, dict) else None
+    raw = display.get("tool_preview_length", 0) if isinstance(display, dict) else 0
+    try:
+        return max(0, int(raw or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _tool_ctx(
+    name: str,
+    args: dict,
+    *,
+    sid: str | None = None,
+    max_len: int | None = None,
+) -> str:
     """Argument preview for a tool row — never a phrased label.
 
     Clients own their own phrasing: the TUI wraps this as ``Terminal("...")``
@@ -7962,7 +7986,11 @@ def _tool_ctx(name: str, args: dict) -> str:
     try:
         from agent.display import build_tool_preview
 
-        return build_tool_preview(name, args, max_len=80) or ""
+        return build_tool_preview(
+            name,
+            args,
+            max_len=_session_tool_preview_length(sid) if max_len is None else max_len,
+        ) or ""
     except Exception:
         return ""
 
@@ -8222,10 +8250,12 @@ def _on_tool_start(sid: str, tool_call_id: str, name: str, args: dict):
             pass
         session.setdefault("tool_started_at", {})[tool_call_id] = time.time()
     if _tool_progress_enabled(sid) or _tool_lifecycle_required_for_ui(name):
+        preview_max_len = _session_tool_preview_length(sid)
         payload: dict[str, object] = {
             "tool_id": tool_call_id,
             "name": name,
-            "context": _tool_ctx(name, args),
+            "context": _tool_ctx(name, args, sid=sid, max_len=preview_max_len),
+            "preview_max_len": preview_max_len,
         }
         # The desktop renders the expanded tool row (the `$` transcript) from
         # the args of the part, and `context` is an 80-char display preview.
@@ -9065,7 +9095,7 @@ def _preview_restart_callbacks(parent: str, task_id: str) -> dict:
 
     def tool_start(tool_call_id: str, name: str, args: dict) -> None:
         started_at[tool_call_id] = time.time()
-        ctx = _tool_ctx(name, args)
+        ctx = _tool_ctx(name, args, sid=parent)
         progress(f"Running {name}{f': {ctx}' if ctx else ''}")
 
     def tool_complete(tool_call_id: str, name: str, _args: dict, result: str) -> None:
@@ -9939,9 +9969,10 @@ def _legacy_display_kind(role: str, text: str) -> str | None:
     return None
 
 
-def _history_to_messages(history: list[dict]) -> list[dict]:
+def _history_to_messages(history: list[dict], *, sid: str | None = None) -> list[dict]:
     messages = []
     tool_call_args = {}
+    preview_max_len = _session_tool_preview_length(sid)
 
     for m in history:
         if not isinstance(m, dict):
@@ -9979,9 +10010,14 @@ def _history_to_messages(history: list[dict]) -> list[dict]:
             tc_info = tool_call_args.get(tc_id) if tc_id else None
             name = (tc_info[0] if tc_info else None) or m.get("tool_name") or "tool"
             args = (tc_info[1] if tc_info else None) or {}
-            tool_msg = {"role": "tool", "name": name, "context": _tool_ctx(name, args)}
+            tool_msg = {
+                "role": "tool",
+                "name": name,
+                "context": _tool_ctx(name, args, sid=sid, max_len=preview_max_len),
+                "preview_max_len": preview_max_len,
+            }
             # This is the display projection, so keep it faithful. `context`
-            # is an 80-char preview for collapsed row titles. A renderer that
+            # is the configured preview for collapsed row titles. A renderer that
             # shows the full call (the expanded `$` transcript in the desktop)
             # rebuilds it from args. When only the preview shipped, that
             # truncation was permanent.
@@ -11565,7 +11601,7 @@ def _live_session_payload(
     payload = {
         "info": _fallback_session_info(session),
         "message_count": len(history),
-        "messages": [] if omit_messages else _history_to_messages(history),
+        "messages": [] if omit_messages else _history_to_messages(history, sid=sid),
         "messages_omitted": omit_messages,
         "running": running,
         "turn_started_at": turn_started_at,

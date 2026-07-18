@@ -890,7 +890,7 @@ export const ToolTrail = memo(function ToolTrail({
   }
 
   for (const tool of tools) {
-    const label = formatToolCall(tool.name, tool.context || '')
+    const label = formatToolCall(tool.name, tool.context || '', tool.previewMaxLength)
 
     groups.push({
       color: t.color.text,

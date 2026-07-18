@@ -8,6 +8,7 @@ import {
   estimateRows,
   estimateTokensRough,
   fmtK,
+  formatToolCall,
   hasAnsi,
   isToolTrailResultLine,
   lastCotTrailIndex,
@@ -19,6 +20,20 @@ import {
   stripAnsi,
   thinkingPreview
 } from '../lib/text.js'
+
+describe('formatToolCall', () => {
+  it('preserves context already bounded by the gateway', () => {
+    const context = 'x'.repeat(120)
+
+    expect(formatToolCall('hindsight_retain', context, 120)).toBe(`Hindsight Retain("${context}")`)
+  })
+
+  it('still supports an explicit local cap for non-gateway previews', () => {
+    const context = 'x'.repeat(120)
+
+    expect(formatToolCall('delegate_task', context, 64)).toBe(`Delegate Task("${'x'.repeat(63)}…")`)
+  })
+})
 
 describe('isToolTrailResultLine', () => {
   it('detects completion markers', () => {

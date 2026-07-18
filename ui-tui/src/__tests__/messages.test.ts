@@ -84,6 +84,21 @@ describe('toTranscriptMessages', () => {
     expect(result[0]?.kind).toBe('event')
     expect(result[0]?.text).toBe('background agent work finished')
   })
+
+  it('hydrates configured and unlimited tool preview budgets', () => {
+    const configured = 'x'.repeat(120)
+    const unlimited = 'y'.repeat(100)
+
+    const messages = toTranscriptMessages([
+      { role: 'user', text: 'prompt' },
+      { role: 'tool', context: configured, name: 'hindsight_retain', preview_max_len: 120 },
+      { role: 'tool', context: unlimited, name: 'read_file', preview_max_len: 0 },
+      { role: 'assistant', text: 'answer' }
+    ])
+
+    expect(messages[1]?.tools?.[0]).toContain(configured)
+    expect(messages[1]?.tools?.[1]).toContain(unlimited)
+  })
 })
 
 describe('MessageLine', () => {

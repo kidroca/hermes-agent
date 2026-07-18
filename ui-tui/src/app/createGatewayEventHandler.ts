@@ -1196,7 +1196,8 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
           ev.payload.tool_id,
           ev.payload.name ?? 'tool',
           ev.payload.context ?? '',
-          ev.payload.args_text ? stripAnsi(String(ev.payload.args_text)) : undefined
+          ev.payload.args_text ? stripAnsi(String(ev.payload.args_text)) : undefined,
+          ev.payload.preview_max_len
         )
 
         return
@@ -1392,7 +1393,8 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
       case 'subagent.tool': {
         const line = formatToolCall(
           ev.payload.tool_name ?? 'delegate_task',
-          ev.payload.tool_preview ?? ev.payload.text ?? ''
+          ev.payload.tool_preview ?? ev.payload.text ?? '',
+          64
         )
 
         turnController.upsertSubagent(

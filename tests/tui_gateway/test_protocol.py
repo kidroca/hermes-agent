@@ -753,6 +753,7 @@ def test_session_resume_returns_hydrated_messages(server, monkeypatch):
     monkeypatch.setattr(server, "_make_agent", lambda sid, key, session_id=None, session_db=None, **_kwargs: object())
     monkeypatch.setattr(server, "_init_session", lambda sid, key, agent, history, cols=80, **_kwargs: None)
     monkeypatch.setattr(server, "_session_info", lambda _agent, _session=None: {"model": "test/model"})
+    monkeypatch.setattr(server, "_session_tool_preview_length", lambda _sid=None: 200)
 
     resp = server.handle_request(
         {
@@ -769,7 +770,7 @@ def test_session_resume_returns_hydrated_messages(server, monkeypatch):
     assert resp["result"]["messages"] == [
         {"role": "user", "text": "hello"},
         {"role": "assistant", "text": "yo", "reasoning": "thoughts"},
-        {"role": "tool", "name": "tool", "context": ""},
+        {"role": "tool", "name": "tool", "context": "", "preview_max_len": 200},
     ]
 
 

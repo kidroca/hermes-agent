@@ -204,9 +204,11 @@ export const toolTrailLabel = (name: string) =>
     .map(p => p[0]!.toUpperCase() + p.slice(1))
     .join(' ') || name
 
-export const formatToolCall = (name: string, context = '') => {
+export const formatToolCall = (name: string, context = '', maxPreviewLength = 64) => {
   const label = toolTrailLabel(name)
-  const preview = compactPreview(context, 64)
+
+  const preview =
+    maxPreviewLength === 0 ? context.replace(WS_RE, ' ').trim() : compactPreview(context, maxPreviewLength)
 
   return preview ? `${label}("${preview}")` : label
 }
@@ -216,12 +218,13 @@ export const buildToolTrailLine = (
   context: string,
   error?: boolean,
   note?: string,
-  duration?: number
+  duration?: number,
+  maxPreviewLength = 64
 ) => {
   const detail = compactPreview(note ?? '', 72)
   const took = duration !== undefined ? ` (${duration.toFixed(1)}s)` : ''
 
-  return `${formatToolCall(name, context)}${took}${detail ? ` :: ${detail}` : ''} ${error ? '✗' : '✓'}`
+  return `${formatToolCall(name, context, maxPreviewLength)}${took}${detail ? ` :: ${detail}` : ''} ${error ? '✗' : '✓'}`
 }
 
 const verboseToolBlock = (label: string, text?: string) => {
@@ -245,7 +248,8 @@ export const buildVerboseToolTrailLine = (
   error?: boolean,
   duration?: number,
   argsText?: string,
-  resultText?: string
+  resultText?: string,
+  maxPreviewLength = 64
 ) => {
   const detail = [verboseToolBlock('Args', argsText), verboseToolBlock(error ? 'Error' : 'Result', resultText)]
     .filter(Boolean)
@@ -253,7 +257,7 @@ export const buildVerboseToolTrailLine = (
 
   const took = duration !== undefined ? ` (${duration.toFixed(1)}s)` : ''
 
-  return `${formatToolCall(name, context)}${took}${detail ? ` :: ${detail}` : ''} ${error ? '✗' : '✓'}`
+  return `${formatToolCall(name, context, maxPreviewLength)}${took}${detail ? ` :: ${detail}` : ''} ${error ? '✗' : '✓'}`
 }
 
 export const isToolTrailResultLine = (line: string) => line.endsWith(' ✓') || line.endsWith(' ✗')

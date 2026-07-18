@@ -340,6 +340,25 @@ describe('createGatewayEventHandler', () => {
     expect(appended[1]).toMatchObject({ role: 'assistant', text: 'final answer' })
   })
 
+  it('keeps the gateway preview budget on live tool rows', () => {
+    const onEvent = createGatewayEventHandler(buildCtx([]))
+
+    onEvent({
+      payload: { context: 'x'.repeat(120), name: 'hindsight_retain', preview_max_len: 120, tool_id: 'tool-1' },
+      type: 'tool.start'
+    } as any)
+
+    expect(getTurnState().tools[0]).toMatchObject({ previewMaxLength: 120 })
+
+    onEvent({ payload: { name: 'hindsight_retain', preview: 'y'.repeat(200) }, type: 'tool.progress' } as any)
+    onEvent({ payload: { name: 'hindsight_retain', summary: 'retained', tool_id: 'tool-1' }, type: 'tool.complete' } as any)
+
+    const completed = getTurnState().streamPendingTools[0] ?? ''
+
+    expect(completed).toContain(`${'y'.repeat(119)}…`)
+    expect(completed).not.toContain('y'.repeat(120))
+  })
+
   it('groups sequential completed tools into one trail when the turn completes', () => {
     const appended: Msg[] = []
     const onEvent = createGatewayEventHandler(buildCtx(appended))
