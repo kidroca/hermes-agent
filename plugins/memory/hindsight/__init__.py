@@ -536,12 +536,45 @@ def _recall_source_label(result: Any) -> str:
     return ""
 
 
+def _recall_session_labels(result: Any) -> list[str]:
+    """Return unique compact source-session suffixes in tag order."""
+    labels: list[str] = []
+    seen_suffixes: set[str] = set()
+    for tag in _tags_list(result):
+        if not tag.startswith("session:"):
+            continue
+        suffix = tag.removeprefix("session:").rsplit("_", 1)[-1]
+        if suffix and suffix not in seen_suffixes:
+            labels.append(f"s:{suffix}")
+            seen_suffixes.add(suffix)
+    return labels
+
+
+def _recall_timestamp_label(result: Any) -> str:
+    """Return the result's mentioned-at time as a compact UTC provenance label."""
+    value = str(getattr(result, "mentioned_at", "") or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+
+
 def _format_recall_result(result: Any, *, index: int | None = None) -> str:
     text = str(getattr(result, "text", "") or "").strip()
     if not text:
         return ""
     source_label = _recall_source_label(result)
-    prefix = f"{source_label}: {text}" if source_label else text
+    session_labels = _recall_session_labels(result)
+    timestamp_label = _recall_timestamp_label(result)
+    provenance = " · ".join(
+        part for part in (timestamp_label, source_label, *session_labels) if part
+    )
+    prefix = f"[{provenance}] {text}" if provenance else text
     if index is None:
         return f"- {prefix}"
     return f"{index}. {prefix}"
@@ -2101,8 +2134,11 @@ class HindsightMemoryProvider(MemoryProvider):
         logger.debug("Prefetch: returning %d chars of context", len(result))
         header = self._recall_prompt_preamble or (
             "# Hindsight Memory (persistent cross-session context)\n"
-            "Use this as potentially relevant background about the user and prior sessions. "
-            "Verify or inspect source material when exact/current details matter."
+            "Use this as dated historical context. Bracket fields are a UTC timestamp, profile, and "
+            "`s:<short-session-id>` when available. The timestamp shows when Hindsight encountered the "
+            "statement, not necessarily when a fact became true. If relevant entries conflict, prefer newer "
+            "evidence and verify source material when exact/current details matter. Ignore unrelated "
+            "conflicts; mention one only if it materially affects the answer and cannot be verified."
         )
         return f"{header}\n\n{result}"
 
