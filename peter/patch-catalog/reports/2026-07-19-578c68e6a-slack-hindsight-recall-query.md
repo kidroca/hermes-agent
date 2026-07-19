@@ -20,7 +20,7 @@ For a continuation with an active Slack thread session, Hindsight receives only 
 
 The optional query is threaded through gateway dispatch, `AIAgent.run_conversation()`, turn-start memory notifications, synchronous/current prefetch, and completed-turn queued prefetch. Durable memory synchronization still uses the original persisted user payload. `/queue` and turn-boundary `/steer` fallbacks rebuild the recall query from the stripped follow-up text so queued synthetic `MessageEvent` copies do not lose the separation.
 
-The separately managed `slack-dm` profile raises `recall_max_input_chars` from 800 to 2000 in `~/.hermes` commit `af3fffd`; that profile configuration is deliberately not part of this source patch.
+The separately managed `slack-dm` and `slack` profiles both raise `recall_max_input_chars` from 800 to 2000: `~/.hermes` commits `af3fffd` and `41abb89`, respectively. Those profile configurations are deliberately not part of this source patch.
 
 ## Upstream overlap
 
