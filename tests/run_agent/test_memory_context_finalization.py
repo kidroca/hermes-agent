@@ -39,7 +39,10 @@ def test_prefetched_memory_context_reaches_turn_finalizer(monkeypatch):
 
     monkeypatch.setattr(conversation_loop, "finalize_turn", fake_finalize_turn)
 
-    result = conversation_loop.run_conversation(_FakeAgent(), "hello")
+    result = conversation_loop.run_conversation(
+        _FakeAgent(), "hello", memory_query_message="memory-only query"
+    )
 
     assert result == {"final_response": None}
     assert captured["memory_context"] == "## Hindsight\nPeter likes compact output."
+    assert captured["memory_query_message"] == "memory-only query"

@@ -2037,6 +2037,7 @@ def run_conversation(
     persist_user_platform_id: Optional[str] = None,
     moa_config: Optional[dict[str, Any]] = None,
     memory_context_callback: Optional[Callable[[str], None]] = None,
+    memory_query_message: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run a complete conversation with tool calling until completion.
@@ -2065,7 +2066,8 @@ def run_conversation(
             Discord/Telegram message id) to store as metadata on that
             persisted user message, so restart drain-window recovery can
             dedup an interrupted turn against the transcript.
-                or queuing follow-up prefetch work.
+        memory_query_message: Optional external-memory recall query when it
+            should differ from the model and persisted user payload.
 
     Returns:
         Dict: Complete conversation result with final response and message history
@@ -2120,6 +2122,7 @@ def run_conversation(
             persist_user_display_kind=persist_user_display_kind,
             persist_user_display_metadata=persist_user_display_metadata,
             persist_user_platform_id=persist_user_platform_id,
+            memory_query_message=memory_query_message,
             restore_or_build_system_prompt=_restore_or_build_system_prompt,
             install_safe_stdio=_install_safe_stdio,
             sanitize_surrogates=_sanitize_surrogates,
@@ -9330,6 +9333,7 @@ def run_conversation(
         _pending_verification_response=_pending_verification_response,
         _pending_verification_response_previewed=_pending_verification_response_previewed,
         memory_context=_ext_prefetch_cache,
+        memory_query_message=memory_query_message,
     )
     if _compression_timeout_exhausted:
         # Reuse the gateway's existing context-recovery contract (#98722,

@@ -2978,6 +2978,8 @@ class TestThreadReplyHandling:
         a._team_bot_user_ids = {"T_TEAM": "U_BOT"}
         a._running = True
         a.handle_message = AsyncMock()
+        a._resolve_user_name = AsyncMock(return_value="Alice")
+        a._fetch_thread_parent_text = AsyncMock(return_value=None)
         a.set_session_store(mock_session_store)
         return a
 
@@ -3006,6 +3008,83 @@ class TestThreadReplyHandling:
         # Verify the text is passed through unchanged (no mention stripping needed)
         msg_event = adapter_with_session_store.handle_message.call_args[0][0]
         assert msg_event.text == "Follow-up question"
+        assert msg_event.memory_query_text == "Follow-up question"
+
+    @pytest.mark.asyncio
+    async def test_continuation_memory_query_excludes_block_enrichment(
+        self, adapter_with_session_store, mock_session_store
+    ):
+        """Quoted Block Kit context belongs in the model payload, not recall gating."""
+        session_key = "agent:main:slack:group:T_TEAM:C123:123.000:U_USER"
+        mock_session_store._entries = {session_key: MagicMock()}
+        event = {
+            "text": "Follow-up question",
+            "user": "U_USER",
+            "channel": "C123",
+            "ts": "123.456",
+            "thread_ts": "123.000",
+            "channel_type": "channel",
+            "team": "T_TEAM",
+            "blocks": [
+                {
+                    "type": "rich_text",
+                    "elements": [
+                        {
+                            "type": "rich_text_quote",
+                            "elements": [
+                                {
+                                    "type": "rich_text_section",
+                                    "elements": [
+                                        {"type": "text", "text": "Quoted old context"}
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        await adapter_with_session_store._handle_slack_message(event)
+
+        msg_event = adapter_with_session_store.handle_message.call_args[0][0]
+        assert "Quoted old context" in msg_event.text
+        assert msg_event.memory_query_text == "Follow-up question"
+
+    @pytest.mark.asyncio
+    async def test_first_thread_turn_uses_hydrated_context_for_memory_query(
+        self, adapter_with_session_store, mock_session_store
+    ):
+        """The first agent turn in an existing thread needs the prior discussion."""
+        mock_session_store._entries = {}
+        thread_context = (
+            "[Thread context — prior messages in this thread "
+            "(not yet in conversation history):]\n"
+            "[unverified] Alice: We should ship option B.\n"
+            "[End of thread context]\n\n"
+        )
+        adapter_with_session_store._fetch_thread_context = AsyncMock(
+            return_value=thread_context
+        )
+
+        event = {
+            "text": "<@U_BOT> Can you summarize this?",
+            "user": "U_USER",
+            "channel": "C123",
+            "ts": "123.456",
+            "thread_ts": "123.000",
+            "channel_type": "channel",
+            "team": "T_TEAM",
+        }
+
+        await adapter_with_session_store._handle_slack_message(event)
+
+        msg_event = adapter_with_session_store.handle_message.call_args[0][0]
+        assert msg_event.text == "Can you summarize this?"
+        assert msg_event.channel_context == thread_context
+        assert msg_event.memory_query_text == (
+            "Can you summarize this?\n\n" + thread_context.strip()
+        )
 
     @pytest.mark.asyncio
     async def test_thread_reply_routes_when_parent_mentioned_bot(
@@ -3020,31 +3099,20 @@ class TestThreadReplyHandling:
             return_value=False
         )
         mock_session_store.get_session_metadata = MagicMock(return_value="")
+        adapter_with_session_store._fetch_thread_parent_text = AsyncMock(
+            return_value="<@U_BOT> check this and ask me for run"
+        )
         adapter_with_session_store._app.client.conversations_replies = AsyncMock(
-            side_effect=[
-                # _bot_authored_thread_root miss path → full context fetch
-                # (parent is human-authored, so check 4 fails).
-                {
-                    "messages": [
-                        {
-                            "ts": "123.000",
-                            "user": "U_USER",
-                            "text": "<@U_BOT> check this and ask me for run",
-                        },
-                    ],
-                },
-                # Any later fetch (cold-start context) reuses cache or refetches.
-                {
-                    "messages": [
-                        {
-                            "ts": "123.000",
-                            "user": "U_USER",
-                            "text": "<@U_BOT> check this and ask me for run",
-                        },
-                        {"ts": "123.456", "user": "U_USER", "text": "run"},
-                    ],
-                },
-            ]
+            return_value={
+                "messages": [
+                    {
+                        "ts": "123.000",
+                        "user": "U_USER",
+                        "text": "<@U_BOT> check this and ask me for run",
+                    },
+                    {"ts": "123.456", "user": "U_USER", "text": "run"},
+                ],
+            }
         )
         adapter_with_session_store._user_name_cache = {("T_TEAM", "U_USER"): "Kai Yi"}
 
@@ -3097,6 +3165,31 @@ class TestThreadReplyHandling:
             "555.000",
         ) in adapter_with_session_store._mentioned_threads
 
+    @pytest.mark.asyncio
+    async def test_thread_reply_with_mention_strips_bot_id(
+        self, adapter_with_session_store, mock_session_store
+    ):
+        """Thread replies with @mention should still strip the bot ID."""
+        # Even with a session, mentions should be stripped
+        session_key = "agent:main:slack:group:T_TEAM:C123:123.000:U_USER"
+        mock_session_store._entries = {session_key: MagicMock()}
+
+        event = {
+            "text": "<@U_BOT> thanks for the help",
+            "user": "U_USER",
+            "channel": "C123",
+            "ts": "123.456",
+            "thread_ts": "123.000",
+            "channel_type": "channel",
+            "team": "T_TEAM",
+        }
+        await adapter_with_session_store._handle_slack_message(event)
+        adapter_with_session_store.handle_message.assert_called_once()
+
+        msg_event = adapter_with_session_store.handle_message.call_args[0][0]
+        assert "<@U_BOT>" not in msg_event.text
+        assert msg_event.text == "thanks for the help"
+        assert msg_event.memory_query_text == "thanks for the help"
 
     @pytest.mark.asyncio
     async def test_active_thread_explicit_mention_refreshes_context_delta(

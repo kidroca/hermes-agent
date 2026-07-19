@@ -587,6 +587,7 @@ def build_turn_context(
     persist_user_message: Optional[Any],
     persist_user_timestamp: Optional[float] = None,
     persist_user_platform_id: Optional[str] = None,
+    memory_query_message: Optional[str] = None,
     *,
     persist_user_display_kind: Optional[str] = None,
     persist_user_display_metadata: Optional[Dict[str, Any]] = None,
@@ -1573,11 +1574,20 @@ def build_turn_context(
         agent._tool_interrupt_reason = None
         agent._interrupt_thread_signal_pending = False
 
+    # The recall query can be narrower than the model/persistence payload (for
+    # example, a Slack continuation without reply/thread scaffolding).
+    _memory_query = (
+        memory_query_message
+        if isinstance(memory_query_message, str)
+        else original_user_message
+        if isinstance(original_user_message, str)
+        else ""
+    )
+
     # Notify memory providers of the new turn (BEFORE prefetch_all).
     if agent._memory_manager:
         try:
-            _turn_msg = original_user_message if isinstance(original_user_message, str) else ""
-            agent._memory_manager.on_turn_start(agent._user_turn_count, _turn_msg)
+            agent._memory_manager.on_turn_start(agent._user_turn_count, _memory_query)
         except Exception:
             pass
 
@@ -1588,9 +1598,8 @@ def build_turn_context(
     ext_prefetch_cache = ""
     if agent._memory_manager and _memory_auto_prefetch_enabled():
         try:
-            _query = original_user_message if isinstance(original_user_message, str) else ""
-            if not is_trivial_prompt(_query):
-                ext_prefetch_cache = agent._memory_manager.prefetch_all(_query) or ""
+            if not is_trivial_prompt(_memory_query):
+                ext_prefetch_cache = agent._memory_manager.prefetch_all(_memory_query) or ""
         except Exception:
             pass
         # Deterministic, model-independent recall indicator: when memory was

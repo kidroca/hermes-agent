@@ -167,6 +167,7 @@ async def test_steer_agent_without_steer_method_falls_back():
         adapter._pending_messages[sk].channel_context
         == "[Thread context]\nAlice: earlier request"
     )
+    assert adapter._pending_messages[sk].memory_query_text == "fallback"
 
 
 if __name__ == "__main__":  # pragma: no cover

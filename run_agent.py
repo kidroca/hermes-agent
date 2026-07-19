@@ -4939,6 +4939,7 @@ class AIAgent:
         final_response: Any,
         interrupted: bool,
         messages: list | None = None,
+        memory_query_message: Optional[str] = None,
     ) -> None:
         """Mirror a completed turn into external memory providers.
 
@@ -4948,9 +4949,9 @@ class AIAgent:
         persist the exchange) and ``queue_prefetch_all`` (to start
         warming context for the next turn) in one shot.
 
-        Uses ``original_user_message`` rather than ``user_message``
-        because the latter may carry injected skill content that bloats
-        or breaks provider queries.
+        ``sync_all`` retains ``original_user_message``. The optional
+        ``memory_query_message`` only shapes ``queue_prefetch_all`` so platform
+        scaffolding can be omitted without changing the durable transcript.
 
         Interrupted turns are skipped entirely (#15218).  A partial
         assistant output, an aborted tool chain, or a mid-stream reset
@@ -4974,6 +4975,11 @@ class AIAgent:
         # expect plain strings, so flatten to text first (newline-joined for
         # memory, vs the default space-join used for log/trajectory previews).
         user_text = _summarize_user_message_for_log(original_user_message, sep="\n")
+        prefetch_text = (
+            _summarize_user_message_for_log(memory_query_message, sep="\n")
+            if memory_query_message is not None
+            else user_text
+        )
         response_text = _summarize_user_message_for_log(final_response, sep="\n")
         if not (user_text and response_text):
             return
@@ -4990,9 +4996,9 @@ class AIAgent:
             # next turn's recall with a trivial prompt ("hi", "thanks") keys
             # provider searches on zero-signal text — skip it. The sync above
             # still runs so the turn itself is persisted.
-            if not is_trivial_prompt(user_text):
+            if not is_trivial_prompt(prefetch_text):
                 self._memory_manager.queue_prefetch_all(
-                    user_text,
+                    prefetch_text,
                     session_id=self.session_id or "",
                 )
         except Exception:
@@ -9269,6 +9275,7 @@ class AIAgent:
         persist_user_platform_id: Optional[str] = None,
         moa_config: Optional[dict[str, Any]] = None,
         memory_context_callback: Optional[Callable[[str], None]] = None,
+        memory_query_message: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Forwarder — see ``agent.conversation_loop.run_conversation``."""
         # A review deliberately shares this agent's session_id for prompt-cache
@@ -9829,6 +9836,7 @@ class AIAgent:
                         persist_user_platform_id=persist_user_platform_id,
                         moa_config=moa_config,
                         memory_context_callback=memory_context_callback,
+                        memory_query_message=memory_query_message,
                     )
                 finally:
                     # The lease remains held through relay/task finalization, but
@@ -9838,6 +9846,7 @@ class AIAgent:
                     # Interrupt clear is deferred to after thread join in the
                     # outer finally: a refresher firing between stop and join
                     # would otherwise set an interrupt that survives the clear.
+
 
             terminal = result if isinstance(result, dict) else {}
             if terminal.get("interrupted") is True:

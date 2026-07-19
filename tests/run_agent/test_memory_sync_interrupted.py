@@ -57,6 +57,27 @@ class TestSyncExternalMemoryForTurn:
 
     # --- Normal completed turn still syncs ------------------------------
 
+    def test_completed_turn_can_queue_a_narrower_memory_query(self):
+        agent = _bare_agent()
+        enriched_message = '[Replying to: "old context"]\n\ndeploy the fix'
+
+        agent._sync_external_memory_for_turn(
+            original_user_message=enriched_message,
+            memory_query_message="deploy the fix",
+            final_response="You're welcome.",
+            interrupted=False,
+        )
+
+        agent._memory_manager.sync_all.assert_called_once_with(
+            enriched_message,
+            "You're welcome.",
+            session_id="test_session_001",
+        )
+        agent._memory_manager.queue_prefetch_all.assert_called_once_with(
+            "deploy the fix",
+            session_id="test_session_001",
+        )
+
 
 
 

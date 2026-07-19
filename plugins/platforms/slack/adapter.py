@@ -6632,6 +6632,13 @@ class SlackAdapter(BasePlatformAdapter):
             ):
                 self._register_mentioned_thread(thread_ts, team_id=team_id)
 
+        # Automatic memory recall uses only text authored in this turn, not
+        # Block Kit quotes, unfurls, files, or other adapter enrichment retained
+        # in ``text`` for the model. Match command and mention normalization.
+        memory_query_text = original_text
+        if is_mentioned:
+            memory_query_text = memory_query_text.replace(f"<@{bot_uid}>", "").strip()
+
         # Thread context rules:
         # - First message in a thread session (cold start): hydrate full
         #   context.
@@ -6656,6 +6663,7 @@ class SlackAdapter(BasePlatformAdapter):
         thread_root_media_urls: List[str] = []
         thread_root_media_types: List[str] = []
         has_active_thread_session = is_thread_reply and self._has_active_session_for_thread(
+
             channel_id=channel_id,
             thread_ts=event_thread_ts,
             user_id=user_id,
@@ -6778,6 +6786,11 @@ class SlackAdapter(BasePlatformAdapter):
                     watermark_ts=ts,
                     team_id=team_id,
                 )
+
+        if channel_context:
+            # Put the new request first so recall input truncation discards the
+            # oldest hydrated context before it can discard user intent.
+            memory_query_text = f"{memory_query_text}\n\n{channel_context}".strip()
 
         # Determine message type
         msg_type = MessageType.TEXT
@@ -7153,6 +7166,7 @@ class SlackAdapter(BasePlatformAdapter):
                 "slack_channel_id": channel_id,
                 "slack_thread_ts": thread_ts,
             },
+            memory_query_text=memory_query_text,
         )
 
         # Only react when bot is directly addressed (1:1 DM or @mention).

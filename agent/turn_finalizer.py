@@ -153,6 +153,7 @@ def finalize_turn(
     _pending_verification_response=None,
     _pending_verification_response_previewed=False,
     memory_context="",
+    memory_query_message=None,
 ):
     """Run the post-loop finalization and return the turn ``result`` dict.
 
@@ -812,6 +813,7 @@ def finalize_turn(
         final_response=final_response,
         interrupted=interrupted,
         messages=messages,
+        memory_query_message=memory_query_message,
     )
 
     # Background memory/skill review — runs AFTER the response is delivered

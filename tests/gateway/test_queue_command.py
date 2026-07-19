@@ -133,6 +133,7 @@ async def test_queue_preserves_reply_context():
     assert queued.reply_to_text == "the original message"
     assert queued.reply_to_author_id == "a1"
     assert queued.reply_to_author_name == "alice"
+    assert queued.memory_query_text == "and this"
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -433,6 +433,25 @@ def test_memory_auto_prefetch_env_defaults_enabled(monkeypatch):
     memory_manager.prefetch_all.assert_called_once_with("normal chat query")
 
 
+def test_memory_query_override_does_not_change_persisted_user_message(monkeypatch):
+    agent = _FakeAgent()
+    memory_manager = MagicMock()
+    memory_manager.prefetch_all.return_value = "recalled context"
+    agent._memory_manager = memory_manager  # type: ignore[assignment]
+    monkeypatch.delenv("HERMES_MEMORY_AUTO_PREFETCH", raising=False)
+
+    ctx = _build(
+        agent,
+        user_message='[Replying to: "old context"]\n\ndeploy the fix',
+        persist_user_message='[Replying to: "old context"]\n\ndeploy the fix',
+        memory_query_message="deploy the fix",
+    )
+
+    assert ctx.original_user_message == '[Replying to: "old context"]\n\ndeploy the fix'
+    memory_manager.on_turn_start.assert_called_once_with(1, "deploy the fix")
+    memory_manager.prefetch_all.assert_called_once_with("deploy the fix")
+
+
 def test_ensure_db_session_runs_after_system_prompt_restore():
     """Regression for #45499.
 
