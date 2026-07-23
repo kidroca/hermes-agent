@@ -158,6 +158,23 @@ def test_discord_toolsets_do_not_leak_to_other_platforms():
     assert "discord_admin" not in enabled
 
 
+def test_kanban_is_default_off_until_explicitly_configured():
+    assert "kanban" in _DEFAULT_OFF_TOOLSETS
+    assert "kanban" not in _get_platform_tools({}, "cli")
+
+
+def test_kanban_explicit_opt_in_is_platform_scoped():
+    config = {
+        "platform_toolsets": {
+            "cli": ["terminal", "kanban"],
+            "slack": ["terminal"],
+        }
+    }
+
+    assert "kanban" in _get_platform_tools(config, "cli")
+    assert "kanban" not in _get_platform_tools(config, "slack")
+
+
 
 
 

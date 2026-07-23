@@ -55,9 +55,17 @@ def _profile_has_kanban_toolset() -> bool:
     # (~30s) by the tool registry.
     try:
         from hermes_cli.config import load_config
+
         cfg = load_config()
-        toolsets = cfg.get("toolsets", [])
-        return "kanban" in toolsets
+        legacy_toolsets = cfg.get("toolsets") or []
+        if isinstance(legacy_toolsets, list) and "kanban" in legacy_toolsets:
+            return True
+        platform_toolsets = cfg.get("platform_toolsets") or {}
+        return any(
+            "kanban" in toolsets
+            for toolsets in platform_toolsets.values()
+            if isinstance(toolsets, list)
+        )
     except Exception:
         return False
 

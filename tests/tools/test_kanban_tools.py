@@ -40,6 +40,117 @@ def test_kanban_tools_hidden_without_env_var(monkeypatch, tmp_path):
     )
 
 
+def test_kanban_tools_visible_with_cli_platform_toolset_config(monkeypatch, tmp_path):
+    """The per-platform config written by Hermes must enable Kanban in CLI/TUI."""
+    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    (home / "config.yaml").write_text(
+        "platform_toolsets:\n"
+        "  cli:\n"
+        "    - terminal\n"
+        "    - kanban\n"
+    )
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    import tools.kanban_tools  # ensure registered
+    from hermes_cli.config import load_config
+    from hermes_cli.tools_config import _get_platform_tools
+    from model_tools import _clear_tool_defs_cache, get_tool_definitions
+    from tools.registry import invalidate_check_fn_cache
+
+    invalidate_check_fn_cache()
+    _clear_tool_defs_cache()
+    enabled = sorted(_get_platform_tools(load_config(), "cli"))
+    schema = get_tool_definitions(enabled_toolsets=enabled, quiet_mode=True)
+    names = {s["function"].get("name") for s in schema if "function" in s}
+    assert "kanban_show" in names
+    assert "kanban_list" in names
+
+
+def test_platform_kanban_config_survives_null_legacy_toolsets(monkeypatch, tmp_path):
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    (home / "config.yaml").write_text(
+        "toolsets: null\n"
+        "platform_toolsets:\n"
+        "  cli:\n"
+        "    - kanban\n"
+    )
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    from tools.kanban_tools import _profile_has_kanban_toolset
+
+    assert _profile_has_kanban_toolset() is True
+
+
+@pytest.mark.parametrize(
+    ("platform_toolsets", "expected_visible"),
+    [
+        ({"cli": ["kanban"], "slack": ["terminal"]}, False),
+        ({"cli": ["terminal"], "slack": ["kanban"]}, True),
+    ],
+)
+def test_kanban_tool_exposure_respects_platform_selection(
+    monkeypatch, tmp_path, platform_toolsets, expected_visible
+):
+    """The profile guard and per-platform resolver enforce isolation together."""
+    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    (home / "config.yaml").write_text(
+        json.dumps({"platform_toolsets": platform_toolsets})
+    )
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    import tools.kanban_tools  # ensure registered
+    from hermes_cli.config import load_config
+    from hermes_cli.tools_config import _get_platform_tools
+    from model_tools import _clear_tool_defs_cache, get_tool_definitions
+    from tools.registry import invalidate_check_fn_cache
+
+    invalidate_check_fn_cache()
+    _clear_tool_defs_cache()
+    enabled = sorted(_get_platform_tools(load_config(), "slack"))
+    schema = get_tool_definitions(enabled_toolsets=enabled, quiet_mode=True)
+    names = {s["function"].get("name") for s in schema if "function" in s}
+    assert ("kanban_show" in names) is expected_visible
+
+
+def test_kanban_platform_selection_does_not_leak_through_caches(monkeypatch, tmp_path):
+    """A CLI schema build must not expose Kanban in the next Slack schema."""
+    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    (home / "config.yaml").write_text(
+        json.dumps({
+            "platform_toolsets": {
+                "cli": ["terminal", "kanban"],
+                "slack": ["terminal"],
+            }
+        })
+    )
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    import tools.kanban_tools  # ensure registered
+    from hermes_cli.config import load_config
+    from hermes_cli.tools_config import _get_platform_tools
+    from model_tools import _clear_tool_defs_cache, get_tool_definitions
+    from tools.registry import invalidate_check_fn_cache
+
+    invalidate_check_fn_cache()
+    _clear_tool_defs_cache()
+    cfg = load_config()
+
+    def tool_names(platform):
+        enabled = sorted(_get_platform_tools(cfg, platform))
+        schema = get_tool_definitions(enabled_toolsets=enabled, quiet_mode=True)
+        return {s["function"].get("name") for s in schema if "function" in s}
+
+    assert "kanban_show" in tool_names("cli")
+    assert "kanban_show" not in tool_names("slack")
+
+
 # ---------------------------------------------------------------------------
 # Handler happy paths
 # ---------------------------------------------------------------------------
