@@ -29,6 +29,7 @@ def test_prompt_submit_emits_memory_context_when_tui_display_enabled(monkeypatch
             conversation_history=None,
             stream_callback=None,
             persist_user_message=None,
+            **_kwargs,
         ):
             return {
                 "final_response": "reply",
@@ -80,6 +81,7 @@ def test_prompt_submit_emits_memory_context_before_streaming(monkeypatch):
             stream_callback=None,
             persist_user_message=None,
             memory_context_callback=None,
+            **_kwargs,
         ):
             assert memory_context_callback is not None
             cb = memory_context_callback

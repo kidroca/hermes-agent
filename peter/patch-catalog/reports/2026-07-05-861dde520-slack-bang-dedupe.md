@@ -29,7 +29,10 @@ Maintainer signal below means visible PR reviews/comments from the GitHub API; a
 
 ## Recommendation
 
-Keep local dedupe; conflict risk is medium-high if upstream redesigns gateway command prefixes or Slack slash/bang handling.
+Dropped during the 2026-07-25 rebase. Upstream `5f3f1948b7` introduced
+`_rewrite_known_bang_command`, applies it before event deduplication, and carries
+focused Slack thread/channel coverage. That implementation supersedes the local
+normalization patch.
 
 ## Raw search queries used
 

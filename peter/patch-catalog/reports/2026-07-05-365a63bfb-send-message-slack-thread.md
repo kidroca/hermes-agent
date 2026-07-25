@@ -29,7 +29,11 @@ Maintainer signal below means visible PR reviews/comments from the GitHub API; a
 
 ## Recommendation
 
-Keep; this is small and likely correct. Watch send_message routing issues for an upstream generalized thread-aware fix.
+Dropped during the 2026-07-25 rebase. Upstream `93e25ceb13` added the
+thread-aware adapter/standalone delivery contract, and `d9fe008db` routed Slack
+text sends through that path. The shared `_send_via_adapter` now passes
+`thread_id` to both the live adapter metadata and standalone sender, replacing
+this Slack-specific patch with the generalized implementation.
 
 ## Raw search queries used
 

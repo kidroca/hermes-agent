@@ -168,7 +168,9 @@ toolsets:
     assert resolved is not None
     assert "terminal" in resolved
     assert "web" in resolved
-    assert "kanban" in resolved  # recovered worker lifecycle surface
+    # Task-scoped kanban lifecycle tools are appended later by model_tools;
+    # this resolver should reflect the selected profile's CLI surface only.
+    assert "kanban" not in resolved
     assert resolved != ["kanban"]
 
 

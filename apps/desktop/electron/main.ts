@@ -14636,7 +14636,10 @@ function createWindow() {
     broadcastBootProgress()
     sendWindowStateChanged()
     setImmediate(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) return
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return
+      }
+
       mainWindow.show()
       mainWindow.focus()
     })
@@ -16946,7 +16949,10 @@ ipcMain.on('hermes:active-work', (event, payload) => {
 })
 
 ipcMain.on('hermes:titlebar-theme', (_event, payload) => {
-  if (IS_WSL) return
+  if (IS_WSL) {
+    return
+  }
+
   if (!payload || !isHexColor(payload.background) || !isHexColor(payload.foreground)) {
     return
   }

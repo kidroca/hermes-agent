@@ -3066,6 +3066,9 @@ class TestThreadReplyHandling:
         adapter_with_session_store._fetch_thread_context = AsyncMock(
             return_value=thread_context
         )
+        adapter_with_session_store._collect_thread_root_images = AsyncMock(
+            return_value=([], [])
+        )
 
         event = {
             "text": "<@U_BOT> Can you summarize this?",
@@ -3102,17 +3105,16 @@ class TestThreadReplyHandling:
         adapter_with_session_store._fetch_thread_parent_text = AsyncMock(
             return_value="<@U_BOT> check this and ask me for run"
         )
-        adapter_with_session_store._app.client.conversations_replies = AsyncMock(
-            return_value={
-                "messages": [
-                    {
-                        "ts": "123.000",
-                        "user": "U_USER",
-                        "text": "<@U_BOT> check this and ask me for run",
-                    },
-                    {"ts": "123.456", "user": "U_USER", "text": "run"},
-                ],
-            }
+        adapter_with_session_store._fetch_thread_context = AsyncMock(
+            return_value=(
+                "[Thread context — prior messages in this thread "
+                "(not yet in conversation history):]\n"
+                "[unverified] Kai Yi: <@U_BOT> check this and ask me for run\n"
+                "[End of thread context]\n\n"
+            )
+        )
+        adapter_with_session_store._collect_thread_root_images = AsyncMock(
+            return_value=([], [])
         )
         adapter_with_session_store._user_name_cache = {("T_TEAM", "U_USER"): "Kai Yi"}
 

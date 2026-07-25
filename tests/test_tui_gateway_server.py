@@ -7158,7 +7158,7 @@ def test_prompt_submit_empty_truncation_allowed_with_confirm(monkeypatch):
 
     try:
         monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
-        monkeypatch.setattr(server, "_get_usage", lambda _a: {})
+        monkeypatch.setattr(server, "_get_usage", lambda _a, _m=None: {})
         monkeypatch.setattr(server, "render_message", lambda _t, _c: "")
         monkeypatch.setattr(server, "_emit", lambda *a: None)
         monkeypatch.setattr(server, "_get_db", lambda: _FakeDB())
@@ -20828,7 +20828,7 @@ def test_prompt_submit_passes_persist_user_message_to_agent(monkeypatch):
     server._sessions["sid"] = _session(agent=_Agent())
     try:
         monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
-        monkeypatch.setattr(server, "_get_usage", lambda _a: {})
+        monkeypatch.setattr(server, "_get_usage", lambda _a, _m=None: {})
         monkeypatch.setattr(server, "render_message", lambda _t, _c: "")
         monkeypatch.setattr(server, "_emit", lambda *a: None)
 

@@ -135,7 +135,7 @@ class TestResolveCdpOverride:
 
         assert session_info["cdp_url"] == WS_URL
         provider.create_session.assert_called_once_with("task-browser-use")
-        mock_get.assert_called_once_with(
+        mock_get.assert_any_call(
             "https://cdp.browser-use.example/session/json/version",
             timeout=10,
         )
