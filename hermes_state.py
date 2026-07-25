@@ -28,6 +28,7 @@ import re
 import sqlite3
 import struct
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -3477,18 +3478,31 @@ def _copy_database_snapshot(
             source.close()
 
 
-def _db_opens_cleanly(db_path: Path) -> Optional[str]:
+def _db_opens_cleanly(
+    db_path: Path,
+    *,
+    deep: bool = True,
+    write_probe: bool = True,
+) -> Optional[str]:
     """Probe a DB on a fresh connection. Returns None if healthy, else a reason.
 
     Runs the same first-statement (``PRAGMA journal_mode``) that trips the
-    malformed-schema parse, then ``PRAGMA integrity_check`` and a canonical
-    ``sessions`` read, and finally a rolled-back ``messages`` write so that
-    FTS5 index corruption — which leaves base-table reads and
-    ``integrity_check`` passing while every ``INSERT INTO messages`` fails
-    through the FTS triggers — is reported as unhealthy rather than slipping
-    past as a false "ok" (#50502).
+    malformed-schema parse and a canonical ``sessions`` read. ``write_probe``
+    additionally drives a rolled-back ``messages`` write through the FTS
+    triggers for repair diagnostics. When ``deep`` is true it scans the
+    database with ``PRAGMA integrity_check`` and asks each FTS5 index to verify
+    its inverted index. Routine health paths should use ``deep=False`` and
+    ``write_probe=False``: Doctor must be bounded and observational.
     """
-    conn = _connect_repair_durable(db_path)
+    read_only = not deep and not write_probe
+    if read_only:
+        conn = sqlite3.connect(
+            db_path.resolve().as_uri() + "?mode=ro",
+            uri=True,
+            isolation_level=None,
+        )
+    else:
+        conn = _connect_repair_durable(db_path)
     try:
         # Best-effort tokenizer load: a DB carrying the messages_fts_cjk
         # index needs the cjk_unicode61 extension before any statement can
@@ -3498,11 +3512,34 @@ def _db_opens_cleanly(db_path: Path) -> Optional[str]:
         # working), so tokenizer absence must never classify as corruption.
         load_fts5_cjk_extension(conn)
         conn.execute("PRAGMA journal_mode").fetchone()
-        rows = conn.execute("PRAGMA integrity_check").fetchall()
-        problems = [str(r[0]) for r in rows if r and str(r[0]).lower() != "ok"]
-        if problems:
-            return "; ".join(problems[:3])
+        if deep:
+            try:
+                rows = conn.execute("PRAGMA integrity_check").fetchall()
+            except sqlite3.DatabaseError as exc:
+                return f"sqlite integrity_check failed: {exc}"
+            problems = [str(r[0]) for r in rows if r and str(r[0]).lower() != "ok"]
+            if problems:
+                return "sqlite integrity_check failed: " + "; ".join(problems[:3])
+
+            for fts_table in (
+                "messages_fts",
+                "messages_fts_trigram",
+                "messages_fts_cjk",
+            ):
+                try:
+                    conn.execute(
+                        f"INSERT INTO {fts_table}({fts_table}, rank) VALUES(?, 1)",
+                        ("integrity-check",),
+                    )
+                except sqlite3.OperationalError as exc:
+                    if SessionDB._is_fts5_unavailable_error(exc):
+                        continue
+                    if "no such table" not in str(exc).lower():
+                        return f"fts5 integrity-check failed for {fts_table}: {exc}"
         conn.execute("SELECT COUNT(*) FROM sessions").fetchone()
+
+        if not deep and not write_probe:
+            return None
 
         # FTS5 read probe: run a representative MATCH query against the
         # messages_fts* virtual tables. The FTS *write* probe below catches
@@ -3567,35 +3604,32 @@ def _db_opens_cleanly(db_path: Path) -> Optional[str]:
         # best-effort — if the messages/sessions tables don't exist yet (brand
         # new file mid-init) the OperationalError is treated as "not yet a
         # populated DB", not corruption.
-        probe_session_id = f"_hermes_fts_health_probe_{time.time_ns()}"
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            conn.execute(
-                "INSERT INTO sessions (id, source, started_at) VALUES (?, ?, ?)",
-                (probe_session_id, "_health_probe", time.time()),
-            )
-            conn.execute(
-                "INSERT INTO messages (session_id, role, content, timestamp) "
-                "VALUES (?, ?, ?, ?)",
-                (probe_session_id, "user", "_fts_health_probe", time.time()),
-            )
-            conn.execute("ROLLBACK")
-        except sqlite3.OperationalError as exc:
-            # Missing tables / FTS disabled — not the corruption class we probe.
+        if write_probe:
+            probe_session_id = f"_hermes_fts_health_probe_{time.time_ns()}"
             try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "INSERT INTO sessions (id, source, started_at) VALUES (?, ?, ?)",
+                    (probe_session_id, "_health_probe", time.time()),
+                )
+                conn.execute(
+                    "INSERT INTO messages (session_id, role, content, timestamp) "
+                    "VALUES (?, ?, ?, ?)",
+                    (probe_session_id, "user", "_fts_health_probe", time.time()),
+                )
                 conn.execute("ROLLBACK")
-            except sqlite3.Error:
-                pass
-            msg = str(exc).lower()
-            if "no such table" in msg or "no such column" in msg:
-                return None
-            if "no such tokenizer: cjk_unicode61" in msg:
-                # This probe process couldn't load the cjk extension while
-                # the DB carries the cjk index — capability gap, not
-                # corruption. A tokenizer-capable SessionDB serves it fine;
-                # a tokenizer-less one self-heals by dropping the triggers.
-                return None
-            return str(exc)
+            except sqlite3.OperationalError as exc:
+                # Missing tables / FTS disabled — not the corruption class we probe.
+                try:
+                    conn.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                msg = str(exc).lower()
+                if "no such table" in msg or "no such column" in msg:
+                    return None
+                if "no such tokenizer: cjk_unicode61" in msg:
+                    return None
+                return str(exc)
         return None
     except sqlite3.DatabaseError as exc:
         return str(exc)
@@ -3614,6 +3648,45 @@ def _live_writer_holds_db(db_path: Path) -> bool:
         db_path,
         connect_repair_durable=_connect_repair_durable,
     )
+
+
+def _db_snapshot_opens_cleanly(db_path: Path) -> Optional[str]:
+    """Deep-check a point-in-time SQLite backup instead of the live WAL DB."""
+    fd, snapshot_name = tempfile.mkstemp(prefix="hermes-doctor-", suffix=".db")
+    os.close(fd)
+    snapshot_path = Path(snapshot_name)
+    source = None
+    destination = None
+    try:
+        source_uri = db_path.resolve().as_uri() + "?mode=ro"
+        source = sqlite3.connect(source_uri, uri=True, timeout=30)
+        destination = sqlite3.connect(str(snapshot_path))
+        source.backup(destination, pages=4096, sleep=0.05)
+        destination.close()
+        destination = None
+        source.close()
+        source = None
+        return _db_opens_cleanly(
+            snapshot_path,
+            deep=True,
+            write_probe=False,
+        )
+    except sqlite3.DatabaseError as exc:
+        return f"could not create or verify state.db snapshot: {exc}"
+    finally:
+        if destination is not None:
+            destination.close()
+        if source is not None:
+            source.close()
+        for candidate in (
+            snapshot_path,
+            snapshot_path.with_name(snapshot_path.name + "-wal"),
+            snapshot_path.with_name(snapshot_path.name + "-shm"),
+        ):
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def repair_state_db_schema(db_path: Path, *, backup: bool = True) -> Dict[str, Any]:

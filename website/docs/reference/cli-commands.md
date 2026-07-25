@@ -820,12 +820,13 @@ Subscriptions persist to `~/.hermes/webhook_subscriptions.json` and are hot-relo
 ## `hermes doctor`
 
 ```bash
-hermes doctor [--fix]
+hermes doctor [--fix] [--deep]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--fix` | Attempt automatic repairs where possible. |
+| `--deep` | Run full SQLite and FTS integrity scans against a consistent temporary snapshot. This is intentionally opt-in because it may take a long time and needs temporary space comparable to the session database. |
 
 ## `hermes dump`
 

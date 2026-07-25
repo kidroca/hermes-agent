@@ -40,6 +40,22 @@ def _build_healthy_db(db_path: Path) -> str:
     return sid
 
 
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    [
+        ((3, 44, 5), True),
+        ((3, 44, 6), False),
+        ((3, 45, 1), True),
+        ((3, 50, 4), True),
+        ((3, 50, 7), False),
+        ((3, 51, 2), True),
+        ((3, 51, 3), False),
+    ],
+)
+def test_sqlite_wal_reset_vulnerability_ranges(version, expected):
+    assert hermes_state.is_sqlite_wal_reset_vulnerable(version) is expected
+
+
 def _corrupt_duplicate_fts(db_path: Path) -> None:
     """Inject a duplicate messages_fts row into sqlite_master.
 
@@ -271,6 +287,81 @@ def _corrupt_fts_index_data(db_path: Path) -> None:
     conn = sqlite3.connect(str(db_path), isolation_level=None)
     conn.execute("UPDATE messages_fts_data SET block = X'DEADBEEFDEADBEEF'")
     conn.close()
+
+
+def _corrupt_trigram_fts_index_data(db_path: Path) -> None:
+    """Corrupt only the trigram FTS shadow data."""
+    conn = sqlite3.connect(str(db_path), isolation_level=None)
+    conn.execute("UPDATE messages_fts_trigram_data SET block = X'DEADBEEFDEADBEEF'")
+    conn.close()
+
+
+def test_shallow_doctor_probe_is_bounded_and_observational(tmp_path, monkeypatch):
+    """Normal Doctor neither scans FTS pages nor drives trigger writes."""
+    from hermes_state import _db_opens_cleanly
+
+    db_path = tmp_path / "state.db"
+    _build_healthy_db(db_path)
+    _corrupt_trigram_fts_index_data(db_path)
+
+    statements: list[str] = []
+    connections: list[tuple[tuple, dict]] = []
+    real_connect = sqlite3.connect
+
+    def tracing_connect(*args, **kwargs):
+        connections.append((args, kwargs))
+        conn = real_connect(*args, **kwargs)
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(hermes_state.sqlite3, "connect", tracing_connect)
+
+    assert _db_opens_cleanly(db_path, deep=False, write_probe=False) is None
+    probe_sql = "\n".join(statements).lower()
+    assert any(
+        kwargs.get("uri") is True and "mode=ro" in str(args[0])
+        for args, kwargs in connections
+    )
+    assert "pragma integrity_check" not in probe_sql
+    assert "insert into sessions" not in probe_sql
+    assert "insert into messages" not in probe_sql
+
+
+
+def test_deep_probe_detects_trigram_inverted_index_corruption(tmp_path):
+    """Explicit deep verification catches corruption that accepts new writes."""
+    from hermes_state import _db_opens_cleanly
+
+    db_path = tmp_path / "state.db"
+    _build_healthy_db(db_path)
+    _corrupt_trigram_fts_index_data(db_path)
+
+    reason = _db_opens_cleanly(db_path, deep=True)
+    assert reason is not None
+    reason_lower = reason.lower()
+    assert "messages_fts_trigram" in reason_lower
+    assert "malformed" in reason_lower or "corrupt" in reason_lower
+
+
+def test_deep_snapshot_probe_checks_and_removes_consistent_copy(tmp_path, monkeypatch):
+    """Deep Doctor checks an online snapshot, never the live WAL database."""
+    db_path = tmp_path / "state.db"
+    _build_healthy_db(db_path)
+
+    checked_paths: list[Path] = []
+    real_probe = hermes_state._db_opens_cleanly
+
+    def recording_probe(path, **kwargs):
+        checked_paths.append(Path(path))
+        return real_probe(path, **kwargs)
+
+    monkeypatch.setattr(hermes_state, "_db_opens_cleanly", recording_probe)
+
+    assert hermes_state._db_snapshot_opens_cleanly(db_path) is None
+    assert len(checked_paths) == 1
+    assert checked_paths[0] != db_path
+    assert not checked_paths[0].exists()
+
 
 
 def test_fts_write_corruption_detected_by_write_probe(tmp_path):

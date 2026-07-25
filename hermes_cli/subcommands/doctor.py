@@ -32,6 +32,11 @@ def build_doctor_parser(subparsers, *, cmd_doctor: Callable) -> None:
         ),
     )
     doctor_parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Run full state.db and FTS integrity scans (can be slow on large databases)",
+    )
+    doctor_parser.add_argument(
         "--ack",
         metavar="ADVISORY_ID",
         default=None,

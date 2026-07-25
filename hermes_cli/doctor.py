@@ -1258,6 +1258,7 @@ def check_macos_full_disk_access() -> None:
 def run_doctor(args):
     """Run diagnostic checks."""
     should_fix = getattr(args, 'fix', False)
+    deep_check = getattr(args, 'deep', False)
     ack_target = getattr(args, 'ack', None)
 
     # Doctor runs from the interactive CLI, so CLI-gated tool availability
@@ -2083,24 +2084,46 @@ def run_doctor(args):
     if state_db_path.exists():
         try:
             import sqlite3
-            conn = sqlite3.connect(str(state_db_path))
+            conn = sqlite3.connect(
+                state_db_path.resolve().as_uri() + "?mode=ro",
+                uri=True,
+            )
             cursor = conn.execute("SELECT COUNT(*) FROM sessions")
             count = cursor.fetchone()[0]
             conn.close()
             check_ok(f"{_DHH}/state.db exists ({count} sessions)")
 
-            # FTS write-health probe (#50502): `SELECT COUNT(*)` above succeeds
-            # even when the FTS index is corrupt and every message write fails
-            # through the triggers. `_db_opens_cleanly` now drives a rolled-back
-            # write so this otherwise-silent corruption class is surfaced (and
-            # repaired in place with --fix).
-            from hermes_state import _db_opens_cleanly, repair_state_db_schema
+            # Normal Doctor is intentionally shallow and observational: open
+            # the schema and read canonical data, but do not scan every page or
+            # drive synthetic rows through production FTS triggers. `--deep`
+            # adds full SQLite + FTS5 inverted-index integrity verification.
+            from hermes_state import (
+                _db_opens_cleanly,
+                _db_snapshot_opens_cleanly,
+                is_sqlite_wal_reset_vulnerable,
+                repair_state_db_schema,
+            )
 
-            _write_reason = _db_opens_cleanly(state_db_path)
-            if _write_reason is not None:
+            if is_sqlite_wal_reset_vulnerable():
                 check_warn(
-                    f"{_DHH}/state.db fails a write-health probe (FTS index may be corrupt)",
-                    f"({_write_reason})",
+                    f"SQLite {sqlite3.sqlite_version} has the WAL-reset bug",
+                    "(live multi-process WAL databases can corrupt; upgrade the "
+                    "runtime to SQLite 3.51.3+ / 3.50.7 / 3.44.6)",
+                )
+
+            if deep_check:
+                state_db_reason = _db_snapshot_opens_cleanly(state_db_path)
+            else:
+                state_db_reason = _db_opens_cleanly(
+                    state_db_path,
+                    deep=False,
+                    write_probe=False,
+                )
+            if state_db_reason is not None:
+                probe_label = "deep integrity" if deep_check else "structural health"
+                check_warn(
+                    f"{_DHH}/state.db fails a {probe_label} probe (FTS index may be corrupt)",
+                    f"({state_db_reason})",
                 )
                 if should_fix:
                     report = repair_state_db_schema(state_db_path)
@@ -2110,24 +2133,28 @@ def run_doctor(args):
                             if report.get("backup_path") else "n/a"
                         )
                         check_ok(
-                            "Repaired state.db FTS write health",
+                            "Repaired state.db health",
                             f"(strategy: {report.get('strategy')}; backup: {backup_name})",
                         )
                         fixed_count += 1
                     else:
                         check_warn(
-                            "state.db FTS write-health repair did not recover automatically",
+                            "state.db repair did not recover automatically",
                             f"({report.get('error')}; backup: {report.get('backup_path')})",
                         )
                         issues.append(
-                            "state.db FTS write corruption and auto-repair failed — "
+                            "state.db corruption and auto-repair failed — "
                             "restore from the backup copy beside state.db"
                         )
                 else:
                     issues.append(
-                        "state.db FTS write corruption — run 'hermes doctor --fix' "
+                        "state.db integrity failure — run 'hermes doctor --fix' "
                         "(or 'hermes sessions repair') to rebuild the FTS index"
                     )
+            elif deep_check:
+                check_ok("state.db deep SQLite + FTS integrity verified")
+            else:
+                check_info("state.db deep integrity scan skipped (use 'hermes doctor --deep')")
         except Exception as e:
             from hermes_state import is_malformed_db_error, repair_state_db_schema
 
