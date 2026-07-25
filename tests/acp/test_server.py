@@ -16,6 +16,7 @@ from acp.schema import (
     AgentThoughtChunk,
     AuthenticateResponse,
     AvailableCommandsUpdate,
+    CloseSessionResponse,
     Implementation,
     InitializeResponse,
     LoadSessionResponse,
@@ -99,7 +100,29 @@ class TestInitialize:
         assert resp.protocol_version == acp.PROTOCOL_VERSION
 
 
+    @pytest.mark.asyncio
+    async def test_initialize_returns_capabilities(self, agent):
+        resp = await agent.initialize(protocol_version=1)
+        caps = resp.agent_capabilities
+        assert isinstance(caps, AgentCapabilities)
+        assert caps.load_session is True
+        assert caps.session_capabilities is not None
+        assert caps.session_capabilities.fork is not None
+        assert caps.session_capabilities.list is not None
+        assert caps.session_capabilities.resume is not None
+        assert caps.session_capabilities.close is not None
 
+    @pytest.mark.asyncio
+    async def test_initialize_capabilities_wire_format(self, agent):
+        """Verify the JSON wire format uses correct aliases so ACP clients see the right keys."""
+        resp = await agent.initialize(protocol_version=1)
+        payload = resp.agent_capabilities.model_dump(by_alias=True, exclude_none=True)
+        assert payload["loadSession"] is True
+        session_caps = payload["sessionCapabilities"]
+        assert "fork" in session_caps
+        assert "list" in session_caps
+        assert "resume" in session_caps
+        assert "close" in session_caps
 
     @pytest.mark.asyncio
     async def test_initialize_advertises_provider_and_terminal_auth_methods(self, agent, monkeypatch):
@@ -280,6 +303,284 @@ class TestSessionOps:
 
 
 
+
+    @pytest.mark.asyncio
+    async def test_close_provisional_session_releases_resources_without_db_row(
+        self, tmp_path
+    ):
+        runtime = SimpleNamespace(
+            model="test-model",
+            interrupt=MagicMock(),
+            shutdown_memory_provider=MagicMock(),
+            close=MagicMock(),
+        )
+        db = SessionDB(tmp_path / "state.db")
+        manager = SessionManager(agent_factory=lambda: runtime, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+
+        created = await acp_agent.new_session(cwd="/tmp")
+        response = await acp_agent.close_session(session_id=created.session_id)
+
+        assert isinstance(response, CloseSessionResponse)
+        assert db.get_session(created.session_id) is None
+        assert manager.get_session(created.session_id) is None
+        runtime.shutdown_memory_provider.assert_called_once_with([])
+        runtime.close.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_close_preserves_durable_history_and_marks_session_ended(
+        self, tmp_path
+    ):
+        runtime = SimpleNamespace(
+            model="test-model",
+            interrupt=MagicMock(),
+            shutdown_memory_provider=MagicMock(),
+            close=MagicMock(),
+        )
+        db = SessionDB(tmp_path / "state.db")
+        manager = SessionManager(agent_factory=lambda: runtime, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+
+        created = await acp_agent.new_session(cwd="/tmp")
+        state = manager.get_session(created.session_id)
+        state.history = [{"role": "user", "content": "keep this history"}]
+        manager.save_session(created.session_id)
+
+        response = await acp_agent.close_session(session_id=created.session_id)
+
+        assert isinstance(response, CloseSessionResponse)
+        row = db.get_session(created.session_id)
+        assert row is not None
+        assert row["ended_at"] is not None
+        assert row["end_reason"] == "acp_close"
+        assert [
+            message["content"]
+            for message in db.get_messages_as_conversation(created.session_id)
+        ] == ["keep this history"]
+        assert manager.get_session(created.session_id) is None
+        runtime.shutdown_memory_provider.assert_called_once_with(state.history)
+        runtime.close.assert_called_once_with()
+
+        repeated = await acp_agent.close_session(session_id=created.session_id)
+        assert isinstance(repeated, CloseSessionResponse)
+        runtime.shutdown_memory_provider.assert_called_once()
+        runtime.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_load_after_close_reopens_row_and_recreates_agent(self, tmp_path):
+        runtimes = []
+
+        def factory():
+            runtime = SimpleNamespace(
+                model="test-model",
+                interrupt=MagicMock(),
+                shutdown_memory_provider=MagicMock(),
+                close=MagicMock(),
+            )
+            runtimes.append(runtime)
+            return runtime
+
+        db = SessionDB(tmp_path / "state.db")
+        manager = SessionManager(agent_factory=factory, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+
+        created = await acp_agent.new_session(cwd="/tmp")
+        state = manager.get_session(created.session_id)
+        state.history = [{"role": "user", "content": "resume me"}]
+        manager.save_session(created.session_id)
+        await acp_agent.close_session(session_id=created.session_id)
+        assert db.get_session(created.session_id)["ended_at"] is not None
+
+        # Simulate an ACP process restart: ordinary get/prompt lookup must not
+        # resurrect ended history, while explicit session/load may reopen it.
+        manager = SessionManager(agent_factory=factory, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+        assert manager.get_session(created.session_id) is None
+
+        response = await acp_agent.load_session(
+            cwd="/new-cwd", session_id=created.session_id
+        )
+
+        assert isinstance(response, LoadSessionResponse)
+        row = db.get_session(created.session_id)
+        assert row["ended_at"] is None
+        assert row["end_reason"] is None
+        restored = manager.get_session(created.session_id)
+        assert restored is not None
+        assert restored.agent is runtimes[1]
+        assert restored.history[0]["content"] == "resume me"
+        assert restored.cwd == "/new-cwd"
+
+    @pytest.mark.asyncio
+    async def test_load_does_not_reopen_compression_parent(self, tmp_path):
+        runtime = SimpleNamespace(
+            model="test-model",
+            interrupt=MagicMock(),
+            shutdown_memory_provider=MagicMock(),
+            close=MagicMock(),
+        )
+        db = SessionDB(tmp_path / "state.db")
+        manager = SessionManager(agent_factory=lambda: runtime, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+
+        created = await acp_agent.new_session(cwd="/tmp")
+        state = manager.get_session(created.session_id)
+        state.history = [{"role": "user", "content": "compressed history"}]
+        manager.save_session(created.session_id)
+        db.end_session(created.session_id, "compression")
+
+        response = await acp_agent.load_session(
+            cwd="/new-cwd", session_id=created.session_id
+        )
+
+        assert isinstance(response, LoadSessionResponse)
+        row = db.get_session(created.session_id)
+        assert row["ended_at"] is not None
+        assert row["end_reason"] == "compression"
+
+    @pytest.mark.asyncio
+    async def test_prompt_does_not_implicitly_restore_closed_session(self, tmp_path):
+        runtime = SimpleNamespace(
+            model="test-model",
+            interrupt=MagicMock(),
+            shutdown_memory_provider=MagicMock(),
+            close=MagicMock(),
+        )
+        db = SessionDB(tmp_path / "state.db")
+        manager = SessionManager(agent_factory=lambda: runtime, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+
+        created = await acp_agent.new_session(cwd="/tmp")
+        state = manager.get_session(created.session_id)
+        state.history = [{"role": "user", "content": "persisted"}]
+        manager.save_session(created.session_id)
+        await acp_agent.close_session(session_id=created.session_id)
+
+        response = await acp_agent.prompt(
+            session_id=created.session_id,
+            prompt=[TextContentBlock(type="text", text="should refuse")],
+        )
+
+        assert response.stop_reason == "refusal"
+        assert manager.get_session(created.session_id) is None
+
+    @pytest.mark.asyncio
+    async def test_close_cancels_and_drains_active_prompt_before_resource_cleanup(
+        self, tmp_path
+    ):
+        import threading
+
+        started = threading.Event()
+        release = threading.Event()
+        order = []
+
+        def run_conversation(**kwargs):
+            started.set()
+            assert release.wait(timeout=2)
+            order.append("prompt-finished")
+            return {
+                "final_response": "",
+                "messages": [
+                    {"role": "user", "content": kwargs["persist_user_message"]}
+                ],
+                "interrupted": True,
+            }
+
+        def interrupt():
+            order.append("interrupt")
+            release.set()
+
+        def close_runtime():
+            order.append("resources-closed")
+
+        runtime = SimpleNamespace(
+            model="test-model",
+            run_conversation=run_conversation,
+            interrupt=interrupt,
+            shutdown_memory_provider=MagicMock(),
+            close=close_runtime,
+        )
+        db = SessionDB(tmp_path / "state.db")
+        manager = SessionManager(agent_factory=lambda: runtime, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+        created = await acp_agent.new_session(cwd="/tmp")
+
+        prompt_task = asyncio.create_task(
+            acp_agent.prompt(
+                session_id=created.session_id,
+                prompt=[TextContentBlock(type="text", text="long prompt")],
+            )
+        )
+        assert await asyncio.to_thread(started.wait, 1)
+
+        close_response = await acp_agent.close_session(session_id=created.session_id)
+        prompt_response = await prompt_task
+
+        assert isinstance(close_response, CloseSessionResponse)
+        assert prompt_response.stop_reason == "cancelled"
+        assert order == ["interrupt", "prompt-finished", "resources-closed"]
+        row = db.get_session(created.session_id)
+        assert row["ended_at"] is not None
+        assert row["end_reason"] == "acp_close"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_close_requests_share_one_cleanup(self, tmp_path):
+        runtime = SimpleNamespace(
+            model="test-model",
+            interrupt=MagicMock(),
+            shutdown_memory_provider=MagicMock(),
+            close=MagicMock(),
+        )
+        manager = SessionManager(
+            agent_factory=lambda: runtime,
+            db=SessionDB(tmp_path / "state.db"),
+        )
+        acp_agent = HermesACPAgent(session_manager=manager)
+        created = await acp_agent.new_session(cwd="/tmp")
+
+        first, second = await asyncio.gather(
+            acp_agent.close_session(session_id=created.session_id),
+            acp_agent.close_session(session_id=created.session_id),
+        )
+
+        assert isinstance(first, CloseSessionResponse)
+        assert isinstance(second, CloseSessionResponse)
+        runtime.shutdown_memory_provider.assert_called_once()
+        runtime.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_resume_after_close_reopens_durable_session(self, tmp_path):
+        runtimes = []
+
+        def factory():
+            runtime = SimpleNamespace(
+                model="test-model",
+                interrupt=MagicMock(),
+                shutdown_memory_provider=MagicMock(),
+                close=MagicMock(),
+            )
+            runtimes.append(runtime)
+            return runtime
+
+        db = SessionDB(tmp_path / "state.db")
+        manager = SessionManager(agent_factory=factory, db=db)
+        acp_agent = HermesACPAgent(session_manager=manager)
+        created = await acp_agent.new_session(cwd="/tmp")
+        state = manager.get_session(created.session_id)
+        state.history = [{"role": "user", "content": "resume me too"}]
+        manager.save_session(created.session_id)
+        await acp_agent.close_session(session_id=created.session_id)
+
+        response = await acp_agent.resume_session(
+            cwd="/resumed", session_id=created.session_id
+        )
+
+        assert isinstance(response, ResumeSessionResponse)
+        assert db.get_session(created.session_id)["ended_at"] is None
+        restored = manager.get_session(created.session_id)
+        assert restored is not None
+        assert restored.agent is runtimes[1]
+        assert restored.cwd == "/resumed"
 
     @pytest.mark.asyncio
     async def test_load_session_not_found_returns_none(self, agent):

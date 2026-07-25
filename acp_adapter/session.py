@@ -18,6 +18,7 @@ import re
 import sys
 import time
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from threading import Lock
@@ -181,6 +182,7 @@ class SessionState:
     runtime_lock: Any = field(default_factory=Lock)
     current_prompt_text: str = ""
     interrupted_prompt_text: str = ""
+    closing: bool = False
 
 
 class SessionManager:
@@ -190,6 +192,8 @@ class SessionManager:
     shared SessionDB so they survive process restarts and are searchable
     via ``session_search``.
     """
+
+    _CLOSED_TOMBSTONE_LIMIT = 1024
 
     def __init__(self, agent_factory=None, db=None):
         """
@@ -201,6 +205,10 @@ class SessionManager:
                            SessionDB (``~/.hermes/state.db``) is lazily created.
         """
         self._sessions: Dict[str, SessionState] = {}
+        # Prevent stray post-close prompts from implicitly restoring durable
+        # history. Explicit load/resume clears this process-local tombstone.
+        self._closed_session_ids: set[str] = set()
+        self._closed_session_order: deque[str] = deque()
         self._lock = Lock()
         self._agent_factory = agent_factory
         self._db_instance = db  # None → lazy-init on first use
@@ -235,6 +243,8 @@ class SessionManager:
         a process restart), it is transparently restored.
         """
         with self._lock:
+            if session_id in self._closed_session_ids:
+                return None
             state = self._sessions.get(session_id)
         if state is not None:
             return state
@@ -245,6 +255,7 @@ class SessionManager:
         """Remove a session from memory and database. Returns True if it existed."""
         with self._lock:
             existed = self._sessions.pop(session_id, None) is not None
+        self._forget_closed(session_id)
         db_existed = self._delete_persisted(session_id)
         if existed or db_existed:
             _clear_task_cwd(session_id)
@@ -354,10 +365,39 @@ class SessionManager:
         results.sort(key=lambda item: _updated_at_sort_key(item.get("updated_at")), reverse=True)
         return results
 
-    def update_cwd(self, session_id: str, cwd: str) -> Optional[SessionState]:
-        """Update the working directory for a session and its tool overrides."""
+    def update_cwd(
+        self, session_id: str, cwd: str, *, reopen: bool = False
+    ) -> Optional[SessionState]:
+        """Update a session cwd, optionally reactivating durable history."""
         cwd = _translate_acp_cwd(cwd)
-        state = self.get_session(session_id)  # checks DB too
+        if reopen:
+            self._forget_closed(session_id)
+            with self._lock:
+                state = self._sessions.get(session_id)
+            if state is None:
+                state = self._restore(session_id, reopen=True)
+            elif state.closing:
+                return None
+            else:
+                db = self._get_db()
+                try:
+                    row = db.get_session(session_id) if db is not None else None
+                    if (
+                        db is not None
+                        and row is not None
+                        and row.get("ended_at") is not None
+                        and row.get("end_reason") == "acp_close"
+                    ):
+                        db.reopen_session(session_id)
+                except Exception:
+                    logger.warning(
+                        "Failed to reopen ACP session %s",
+                        session_id,
+                        exc_info=True,
+                    )
+                    return None
+        else:
+            state = self.get_session(session_id)  # checks DB too
         if state is None:
             return None
         state.cwd = cwd
@@ -370,6 +410,8 @@ class SessionManager:
         with self._lock:
             session_ids = list(self._sessions.keys())
             self._sessions.clear()
+            self._closed_session_ids.clear()
+            self._closed_session_order.clear()
         for session_id in session_ids:
             _clear_task_cwd(session_id)
             self._delete_persisted(session_id)
@@ -395,6 +437,108 @@ class SessionManager:
             state = self._sessions.get(session_id)
         if state is not None:
             self._persist(state)
+
+    def begin_close(self, session_id: str) -> Optional[SessionState]:
+        """Mark an active session closing and discard queued follow-up work."""
+        with self._lock:
+            state = self._sessions.get(session_id)
+        if state is None:
+            return None
+        with state.runtime_lock:
+            state.closing = True
+            state.queued_prompts.clear()
+        return state
+
+    def _forget_closed(self, session_id: str) -> None:
+        """Remove a close tombstone when history is explicitly reactivated."""
+        with self._lock:
+            self._closed_session_ids.discard(session_id)
+            try:
+                self._closed_session_order.remove(session_id)
+            except ValueError:
+                pass
+
+    def _remember_closed(self, session_id: str) -> None:
+        """Keep recent close idempotency bounded for provisional sessions."""
+        with self._lock:
+            if session_id in self._closed_session_ids:
+                return
+            if len(self._closed_session_order) >= self._CLOSED_TOMBSTONE_LIMIT:
+                expired = self._closed_session_order.popleft()
+                self._closed_session_ids.discard(expired)
+            self._closed_session_order.append(session_id)
+            self._closed_session_ids.add(session_id)
+
+    def is_closed(self, session_id: str) -> bool:
+        """Return whether *session_id* already completed an ACP close."""
+        with self._lock:
+            if session_id in self._closed_session_ids:
+                return True
+        db = self._get_db()
+        if db is None:
+            return False
+        try:
+            row = db.get_session(session_id)
+            return bool(
+                row
+                and row.get("ended_at") is not None
+                and row.get("end_reason") == "acp_close"
+            )
+        except Exception:
+            logger.debug(
+                "Failed to query close state for ACP session %s",
+                session_id,
+                exc_info=True,
+            )
+            return False
+
+    def finish_close(self, state: SessionState) -> None:
+        """Release one inactive ACP session without deleting durable history."""
+        # Flush any final manager-owned state first. This remains a no-op for an
+        # unused provisional session and never deletes canonical history.
+        self._persist(state)
+        agent = state.agent
+        try:
+            shutdown_memory = getattr(agent, "shutdown_memory_provider", None)
+            if callable(shutdown_memory):
+                shutdown_memory(state.history)
+        except Exception:
+            logger.warning(
+                "Failed to shut down memory provider for ACP session %s",
+                state.session_id,
+                exc_info=True,
+            )
+
+        # Record the ACP boundary before AIAgent.close(), whose generic fallback
+        # reason is ``agent_close`` and is first-writer-wins.
+        db = self._get_db()
+        if db is not None:
+            try:
+                if db.get_session(state.session_id) is not None:
+                    db.end_session(state.session_id, "acp_close")
+            except Exception:
+                logger.warning(
+                    "Failed to end durable ACP session %s",
+                    state.session_id,
+                    exc_info=True,
+                )
+
+        try:
+            close = getattr(agent, "close", None)
+            if callable(close):
+                close()
+        except Exception:
+            logger.warning(
+                "Failed to release ACP agent resources for session %s",
+                state.session_id,
+                exc_info=True,
+            )
+        finally:
+            with self._lock:
+                if self._sessions.get(state.session_id) is state:
+                    self._sessions.pop(state.session_id, None)
+            self._remember_closed(state.session_id)
+            _clear_task_cwd(state.session_id)
 
     # ---- persistence via SessionDB ------------------------------------------
 
@@ -518,7 +662,9 @@ class SessionManager:
         except Exception:
             logger.warning("Failed to persist ACP session %s", state.session_id, exc_info=True)
 
-    def _restore(self, session_id: str) -> Optional[SessionState]:
+    def _restore(
+        self, session_id: str, *, reopen: bool = False
+    ) -> Optional[SessionState]:
         """Load a session from the database into memory, recreating the AIAgent."""
         import threading
 
@@ -538,6 +684,24 @@ class SessionManager:
         # Only restore ACP sessions.
         if row.get("source") != "acp":
             return None
+
+        was_ended = row.get("ended_at") is not None
+        previous_end_reason = row.get("end_reason") or "acp_close"
+        if was_ended and not reopen:
+            return None
+
+        reopened = False
+        if reopen and was_ended and previous_end_reason == "acp_close":
+            try:
+                db.reopen_session(session_id)
+                reopened = True
+            except Exception:
+                logger.warning(
+                    "Failed to reopen ACP session %s",
+                    session_id,
+                    exc_info=True,
+                )
+                return None
 
         # Extract cwd from model_config.
         cwd = "."
@@ -582,6 +746,15 @@ class SessionManager:
             )
         except Exception:
             logger.warning("Failed to recreate agent for ACP session %s", session_id, exc_info=True)
+            if reopened:
+                try:
+                    db.end_session(session_id, str(previous_end_reason))
+                except Exception:
+                    logger.warning(
+                        "Failed to restore ended state for ACP session %s",
+                        session_id,
+                        exc_info=True,
+                    )
             return None
 
         state = SessionState(

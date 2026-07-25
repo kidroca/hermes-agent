@@ -24,6 +24,7 @@ from acp.schema import (
     AvailableCommand,
     AvailableCommandsUpdate,
     BlobResourceContents,
+    CloseSessionResponse,
     ClientCapabilities,
     EmbeddedResourceContentBlock,
     ForkSessionResponse,
@@ -46,6 +47,7 @@ from acp.schema import (
     SetSessionModeResponse,
     ResourceContentBlock,
     SessionCapabilities,
+    SessionCloseCapabilities,
     SessionForkCapabilities,
     SessionInfoUpdate,
     SessionListCapabilities,
@@ -670,6 +672,8 @@ class HermesACPAgent(acp.Agent):
         super().__init__()
         self.session_manager = session_manager or SessionManager()
         self._conn: Optional[acp.Client] = None
+        self._active_prompt_tasks: dict[str, set[asyncio.Task[Any]]] = defaultdict(set)
+        self._close_tasks: dict[str, asyncio.Task[None]] = {}
 
     # ---- Connection lifecycle -----------------------------------------------
 
@@ -1318,6 +1322,7 @@ class HermesACPAgent(acp.Agent):
                 load_session=True,
                 prompt_capabilities=PromptCapabilities(image=True),
                 session_capabilities=SessionCapabilities(
+                    close=SessionCloseCapabilities(),
                     fork=SessionForkCapabilities(),
                     list=SessionListCapabilities(),
                     resume=SessionResumeCapabilities(),
@@ -1616,7 +1621,7 @@ class HermesACPAgent(acp.Agent):
         mcp_servers: list | None = None,
         **kwargs: Any,
     ) -> LoadSessionResponse | None:
-        state = self.session_manager.update_cwd(session_id, cwd)
+        state = self.session_manager.update_cwd(session_id, cwd, reopen=True)
         if state is None:
             logger.warning("load_session: session %s not found", session_id)
             return None
@@ -1664,7 +1669,7 @@ class HermesACPAgent(acp.Agent):
         mcp_servers: list | None = None,
         **kwargs: Any,
     ) -> ResumeSessionResponse:
-        state = self.session_manager.update_cwd(session_id, cwd)
+        state = self.session_manager.update_cwd(session_id, cwd, reopen=True)
         if state is None:
             logger.warning("resume_session: session %s not found, creating new", session_id)
             state = self.session_manager.create_session(cwd=cwd)
@@ -1692,6 +1697,62 @@ class HermesACPAgent(acp.Agent):
                 state.session_id, getattr(state.agent, "session_id", state.session_id)
             ),
         )
+
+    async def _close_active_session(self, state: SessionState) -> None:
+        """Cancel active work, then release one session off the event loop."""
+        with state.runtime_lock:
+            if state.is_running and state.current_prompt_text:
+                state.interrupted_prompt_text = state.current_prompt_text
+            if state.cancel_event:
+                state.cancel_event.set()
+            try:
+                interrupt = getattr(state.agent, "interrupt", None)
+                if callable(interrupt):
+                    interrupt()
+            except Exception:
+                logger.debug(
+                    "Failed to interrupt closing ACP session %s",
+                    state.session_id,
+                    exc_info=True,
+                )
+
+        # prompt() registers its asyncio task before its first await. Waiting for
+        # those tasks guarantees no more session updates race the close response
+        # and avoids closing httpx/SQLite resources under a live worker thread.
+        active = tuple(self._active_prompt_tasks.get(state.session_id, ()))
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+
+        await asyncio.to_thread(self.session_manager.finish_close, state)
+        logger.info("Closed ACP session %s", state.session_id)
+
+    async def close_session(
+        self, session_id: str, **kwargs: Any
+    ) -> CloseSessionResponse | None:
+        """Release active resources while preserving durable conversation history."""
+        existing_task = self._close_tasks.get(session_id)
+        if existing_task is None:
+            if self.session_manager.is_closed(session_id):
+                return CloseSessionResponse()
+            state = self.session_manager.begin_close(session_id)
+            if state is None:
+                logger.warning("close_session: active session %s not found", session_id)
+                return None
+            existing_task = asyncio.create_task(self._close_active_session(state))
+            self._close_tasks[session_id] = existing_task
+
+            def _forget_close_task(done: asyncio.Task[None]) -> None:
+                if self._close_tasks.get(session_id) is done:
+                    self._close_tasks.pop(session_id, None)
+
+            existing_task.add_done_callback(_forget_close_task)
+
+        try:
+            await asyncio.shield(existing_task)
+        finally:
+            if existing_task.done() and self._close_tasks.get(session_id) is existing_task:
+                self._close_tasks.pop(session_id, None)
+        return CloseSessionResponse()
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         state = self.session_manager.get_session(session_id)
@@ -1793,6 +1854,43 @@ class HermesACPAgent(acp.Agent):
         session_id: str,
         **kwargs: Any,
     ) -> PromptResponse:
+        """Track each prompt task so session/close can drain it safely."""
+        state = self.session_manager.get_session(session_id)
+        if state is None:
+            logger.error("prompt: session %s not found", session_id)
+            return PromptResponse(stop_reason="refusal")
+        task = asyncio.current_task()
+        tracked_here = task is not None and task not in self._active_prompt_tasks[session_id]
+        if tracked_here and task is not None:
+            self._active_prompt_tasks[session_id].add(task)
+        try:
+            # Registration precedes the closing check, so any close path that
+            # observes this prompt also has a task to drain before teardown.
+            with state.runtime_lock:
+                if state.closing:
+                    logger.info("prompt: session %s is closing", session_id)
+                    return PromptResponse(stop_reason="refusal")
+            return await self._prompt(prompt=prompt, session_id=session_id, **kwargs)
+        finally:
+            if tracked_here and task is not None:
+                tasks = self._active_prompt_tasks.get(session_id)
+                if tasks is not None:
+                    tasks.discard(task)
+                    if not tasks:
+                        self._active_prompt_tasks.pop(session_id, None)
+
+    async def _prompt(
+        self,
+        prompt: list[
+            TextContentBlock
+            | ImageContentBlock
+            | AudioContentBlock
+            | ResourceContentBlock
+            | EmbeddedResourceContentBlock
+        ],
+        session_id: str,
+        **kwargs: Any,
+    ) -> PromptResponse:
         """Run Hermes on the user's prompt and stream events back to the editor."""
         state = self.session_manager.get_session(session_id)
         if state is None:
@@ -1880,6 +1978,9 @@ class HermesACPAgent(acp.Agent):
         redirected = False
         queued_depth: int | None = None
         with state.runtime_lock:
+            if state.closing:
+                logger.info("prompt: session %s began closing before claim", session_id)
+                return PromptResponse(stop_reason="refusal")
             if state.is_running:
                 if (
                     text_only_prompt
@@ -1907,6 +2008,8 @@ class HermesACPAgent(acp.Agent):
             else:
                 state.is_running = True
                 state.current_prompt_text = user_text or "[Image attachment]"
+                if state.cancel_event:
+                    state.cancel_event.clear()
 
         if redirected:
             if self._conn:
@@ -1927,9 +2030,6 @@ class HermesACPAgent(acp.Agent):
 
         conn = self._conn
         loop = asyncio.get_running_loop()
-
-        if state.cancel_event:
-            state.cancel_event.clear()
 
         tool_call_ids: dict[str, Deque[str]] = defaultdict(deque)
         tool_call_meta: dict[str, dict[str, Any]] = {}
