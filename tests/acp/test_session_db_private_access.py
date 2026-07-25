@@ -140,6 +140,8 @@ class TestPersistRoundTrip:
         manager = SessionManager(agent_factory=_mock_agent, db=db)
 
         state = manager.create_session(cwd="/original")
+        state.history.append({"role": "user", "content": "materialize"})
+        manager.save_session(state.session_id)
         assert db.get_session(state.session_id) is not None
 
         # Simulate cwd change and save
@@ -155,6 +157,7 @@ class TestPersistRoundTrip:
         manager = SessionManager(agent_factory=_mock_agent, db=db)
 
         state = manager.create_session()
+        state.history.append({"role": "user", "content": "materialize"})
         state.model = "new-model-xyz"
         manager.save_session(state.session_id)
 
@@ -167,8 +170,9 @@ class TestPersistRoundTrip:
         manager = SessionManager(agent_factory=_mock_agent, db=db)
 
         state = manager.create_session()
-        # Manually set a model in DB
-        db.update_session_meta(state.session_id, json.dumps({"cwd": "."}), model="stored-model")
+        state.history.append({"role": "user", "content": "materialize"})
+        state.model = "stored-model"
+        manager.save_session(state.session_id)
 
         # Now save with empty model
         state.model = ""

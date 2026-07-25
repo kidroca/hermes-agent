@@ -421,13 +421,26 @@ class SessionManager:
             return None
 
     def _persist(self, state: SessionState) -> None:
-        """Write session state to the database.
+        """Write materialized session state to the database.
 
-        Creates the session record if it doesn't exist, then replaces all
-        stored messages with the current in-memory history.
+        A newly allocated ACP session remains provisional until it has real
+        conversation history. Existing durable sessions are still allowed to
+        persist an explicitly emptied history (for example ``/reset``).
         """
         db = self._get_db()
         if db is None:
+            return
+
+        try:
+            existing = db.get_session(state.session_id)
+        except Exception:
+            logger.warning(
+                "Failed to query ACP session %s before persistence",
+                state.session_id,
+                exc_info=True,
+            )
+            return
+        if existing is None and not state.history:
             return
 
         # Ensure model is a plain string (not a MagicMock or other proxy).
@@ -445,14 +458,13 @@ class SessionManager:
         cwd_json = json.dumps(session_meta)
 
         try:
-            # Ensure the session record exists.
-            existing = db.get_session(state.session_id)
+            # Create the durable session row on first real history only.
             if existing is None:
                 db.create_session(
                     session_id=state.session_id,
                     source="acp",
                     model=model_str,
-                    model_config={"cwd": state.cwd},
+                    model_config=session_meta,
                 )
             else:
                 # Update model_config (contains cwd) if changed.

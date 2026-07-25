@@ -268,6 +268,41 @@ class TestListAndCleanup:
 class TestPersistence:
     """Verify that sessions are persisted to SessionDB and can be restored."""
 
+    def test_create_session_is_provisional_until_first_history(self, manager):
+        state = manager.create_session(cwd="/project")
+        db = manager._get_db()
+
+        assert db.get_session(state.session_id) is None
+
+    def test_preprompt_metadata_updates_do_not_materialize_session(self, manager):
+        state = manager.create_session(cwd="/project")
+        db = manager._get_db()
+
+        manager.update_cwd(state.session_id, "/other-project")
+        state.model = "other-model"
+        manager.save_session(state.session_id)
+
+        assert db.get_session(state.session_id) is None
+
+    def test_first_history_save_creates_searchable_session(self, manager):
+        state = manager.create_session(cwd="/project")
+        state.history.append({"role": "user", "content": "first real prompt"})
+
+        manager.save_session(state.session_id)
+
+        db = manager._get_db()
+        row = db.get_session(state.session_id)
+        assert row is not None
+        assert row["source"] == "acp"
+        assert json.loads(row["model_config"])["cwd"] == "/project"
+        assert [
+            message["content"]
+            for message in db.get_messages_as_conversation(state.session_id)
+        ] == ["first real prompt"]
+        assert state.session_id in {
+            result["session_id"] for result in db.search_messages("first real prompt")
+        }
+
 
 
 
