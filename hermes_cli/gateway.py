@@ -4258,6 +4258,54 @@ def _strip_optional_systemd_directives(text: str) -> str:
     return "\n".join(filtered)
 
 
+def _is_wsl_windows_drive_path(path: str) -> bool:
+    """Return whether *path* is under a WSL Windows drive mount."""
+    prefix = "/mnt/"
+    if not path.startswith(prefix):
+        return False
+    relative = path[len(prefix) :]
+    return bool(
+        relative
+        and relative[0].isascii()
+        and relative[0].isalpha()
+        and (len(relative) == 1 or relative[1] == "/")
+    )
+
+
+def _mask_volatile_wsl_interop_path(path_value: str) -> str:
+    """Drop volatile WSL Windows-drive entries from a PATH value."""
+    return ":".join(
+        segment
+        for segment in path_value.split(":")
+        if not _is_wsl_windows_drive_path(segment)
+    )
+
+
+def _normalize_systemd_unit_for_comparison(text: str) -> str:
+    """Normalize unstable systemd fields before checking unit staleness.
+
+    Generated units intentionally capture the invoking shell's PATH so the
+    gateway can reach user-installed tools.  Under WSL, volatile Windows-interop
+    entries vary between login shells and sudo.  Ignore only Windows drive-mount
+    segments shaped like ``/mnt/<letter>/...`` while preserving deterministic
+    service PATH entries, other ``/mnt`` mounts, and every other unit field.
+    """
+    import re
+
+    normalized = _normalize_service_definition(
+        _strip_optional_systemd_directives(text)
+    )
+    return re.sub(
+        r'(Environment="PATH=)([^"\n]*)(")',
+        lambda match: (
+            match.group(1)
+            + _mask_volatile_wsl_interop_path(match.group(2))
+            + match.group(3)
+        ),
+        normalized,
+    )
+
+
 def _normalize_launchd_plist_for_comparison(text: str) -> str:
     """Normalize launchd plist text for staleness checks.
 
@@ -4303,15 +4351,10 @@ def systemd_unit_is_current(system: bool = False) -> bool:
     installed = unit_path.read_text(encoding="utf-8")
     expected_user = _read_systemd_user_from_unit(unit_path) if system else None
     expected = generate_systemd_unit(system=system, run_as_user=expected_user)
-    # Normalize out directives that older systemd versions silently drop
-    # (RestartMaxDelaySec, RestartSteps) so a unit that differs only by
-    # those directives is not perpetually flagged as outdated.
-    norm_installed = _normalize_service_definition(
-        _strip_optional_systemd_directives(installed)
-    )
-    norm_expected = _normalize_service_definition(
-        _strip_optional_systemd_directives(expected)
-    )
+    # Ignore unstable PATH payloads and directives that older systemd versions
+    # silently drop while preserving strict comparison of every other field.
+    norm_installed = _normalize_systemd_unit_for_comparison(installed)
+    norm_expected = _normalize_systemd_unit_for_comparison(expected)
     return norm_installed == norm_expected
 
 
