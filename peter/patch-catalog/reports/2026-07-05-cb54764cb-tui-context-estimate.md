@@ -2,16 +2,22 @@
 
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
-- Patch ref: `cb54764cb`
+- Patch lineage: `cb54764cb` → pre-2026-07-27 stack `64519d142` → transient rebase `3d85322ca`; dropped on 2026-07-27
 - Branch: peter/hermes-patches
-- Local status: clean at dispatch; catalogue docs generated without modifying Hermes source code
+- Local status: historical; no longer present in `peter/hermes-patches`
 - Motivation: keep Peter's local Hermes fork behavior stable while upstream evolves.
 - Changed files: tests/test_tui_gateway_server.py, tui_gateway/server.py
-- Tests / verification: commit contains focused tests: TUI gateway context-estimation tests; this catalogue run inspected `git show --stat` for included commits and updated docs only.
+- Tests / verification: after retirement, the canonical isolated gateway run passed 602 tests across `test_auto_continue.py`, `test_failed_turn_retention.py`, `test_protocol.py`, and `test_tui_gateway_server.py`.
 
 ## Local patch summary
 
 Makes the TUI gateway produce a useful context estimate when provider token usage is absent, avoiding a dead/blank context meter for providers that do not return token counts.
+
+## Retirement note — 2026-07-27
+
+The patch was dropped after rebasing onto upstream `main` at `8eaaa5021`. Upstream commit `83b7c52ec` deliberately emits no context gauge when a real current-window occupancy value is unavailable: unknown is preferable to a plausible-looking estimate. The built-in compressor still reports real `last_prompt_tokens` after a turn, so ordinary context reporting is unaffected.
+
+The local fallback was display-only. It estimated message and system-prompt text with a rough tokenizer heuristic, did not improve compression or context management, and added message-history plumbing plus a second `_get_usage` argument that repeatedly conflicted with upstream and test fixtures. Retiring it restores upstream's intentional unknown-state contract; this is a policy supersession, not equivalent upstream fallback functionality.
 
 ## Upstream overlap
 
@@ -29,7 +35,7 @@ Maintainer signal below means visible PR reviews/comments from the GitHub API; a
 
 ## Recommendation
 
-High-overlap area: compare against #34282/#56746 during rebase and prefer upstream semantics if they land.
+Keep this report as historical context. Do not restore the rough fallback unless a concrete provider/user problem justifies estimated precision over upstream's explicit unknown state; prefer real current-window token accounting.
 
 ## Raw search queries used
 

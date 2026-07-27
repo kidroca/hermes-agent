@@ -4,16 +4,22 @@
 - **Repo:** `NousResearch/hermes-agent` (`/opt/hermes-agent`)
 - **Patch ref:** `6480450d116ff1e565fff96302cf7c61599a708c`
 - **Branch:** `peter/hermes-patches`
-- **Local status:** committed at branch `HEAD`; unrelated pre-existing `package-lock.json` modification remains unstaged and untouched
+- **Local status:** retained in `peter/hermes-patches`; rebased patch is `51e2dcdbe`
 - **Motivation:** The Ink TUI independently hard-coded an 80-character gateway label budget and a 64-character frontend budget, bypassing `display.tool_preview_length`. Values above 120 should be allowed to wrap naturally, while documented `0 = unlimited` behavior must remain intact. This patch deliberately excludes per-row expansion.
-- **Changed files:** 12 files, **213 additions / 29 deletions**: `tui_gateway/server.py`, `tests/test_tui_gateway_server.py`, and ten `ui-tui` TypeScript/test files spanning gateway event handling, turn state, message hydration, types, rendering, and preview helpers.
-- **Tests / verification:** gateway suite 346 passed; focused UI 119 passed; TypeScript typecheck, changed-file ESLint, `py_compile`, and `git diff --check` passed. Full UI suite: 1131 passed, 1 skipped, 1 unrelated pre-existing failure in `packages/hermes-ink/src/ink/ink-backpressure.test.ts`. Independent review found no logic/security blockers and judged scope bounded; static secret/injection scan clean.
+- **Changed files:** 13 files, **219 additions / 31 deletions**: `tui_gateway/server.py`, `tests/test_tui_gateway_server.py`, `tests/tui_gateway/test_protocol.py`, and ten `ui-tui` TypeScript/test files spanning gateway event handling, turn state, message hydration, types, rendering, and preview helpers.
+- **Tests / verification:** final canonical isolated gateway run: 602 passed; focused UI: 133 passed; TUI TypeScript typecheck, ESLint, and `git diff --check` passed. Full UI suite: 1384 passed, 1 skipped, and 20 failures confined to two upstream-only files (`subscriptionOverlay.test.tsx` and `ink-backpressure.test.ts`); the same 20 failures reproduced on pristine updated `main`. Independent review found no behavioral blockers.
 
 ## Local patch summary
 
 The patch resolves `display.tool_preview_length` from each active session/profile rather than mutating process-global display state. The gateway applies the resolved budget to live tool starts and hydrated history, emits `preview_max_len`, and preserves `0` as unlimited. The frontend stores and reapplies that budget through active, completed, verbose, and hydrated tool rendering; events without the new field retain the historical 64-character compatibility fallback. Existing `TreeTextRow` wrapping is left to handle longer previews naturally. Separately capped/redacted verbose arguments and results are unchanged, and no per-tool expansion state or retrieval path is introduced.
 
 Conflict surface is concentrated in `tui_gateway/server.py` and the Ink tool-event/rendering pipeline (`createGatewayEventHandler.ts`, `turnController.ts`, `thinking.tsx`, `messages.ts`, `gatewayTypes.ts`, `text.ts`, and `types.ts`). The local implementation is materially broader than the two exact upstream fixes because it carries a session-scoped budget end-to-end and through history hydration.
+
+## Rebase note — 2026-07-27
+
+Rebased onto upstream `main` at `8eaaa5021`. Upstream commit `f0031abc3` moved live gateway tool rows from a phrased `build_tool_label` value to the raw `build_tool_preview` boundary; `cab6447d5` then extended that raw-preview path to resumed tool rows. Together they remove duplicated client phrasing but do **not** propagate `display.tool_preview_length` per session/profile or preserve the configured budget through frontend state and hydration.
+
+The local patch was therefore retained and adapted: `_tool_ctx` now uses upstream's raw `build_tool_preview` contract while applying the session/profile budget, and the existing `preview_max_len` payload/frontend propagation remains authoritative. The initial upstream rebase mapped `9ad405d04` to `a47664801`; the later context-estimation retirement rewrite mapped `a47664801` to final patch `51e2dcdbe`. Conflict verification passed (5 Python tests and 133 TUI tests), followed by post-rebase TUI typecheck/lint and a canonical isolated run of 602 Python tests across the affected gateway surfaces.
 
 ## Upstream overlap
 
@@ -38,7 +44,7 @@ Evidence below was fetched with authenticated `gh` as `kidroca` on 2026-07-18. �
 
 The upstream record strongly validates the local bug report and the required `0 = unlimited` contract. The collaborator duplicate triage on #52601 is the clearest human repository signal. Neither competing PR currently implements the full local contract:
 
-- #41852 mutates a process-global display limit and is stale relative to `build_tool_label`; automated review explicitly rejects that profile-scoping model.
+- #41852 mutates a process-global display limit and is stale relative to the current `build_tool_preview` boundary; automated review explicitly rejects that profile-scoping model.
 - #41854 initializes only the stdio entry path, missing the shared WebSocket surface, and its tests set global state rather than testing propagation.
 - Both are dirty/conflicting as of the evidence fetch.
 - The local patch additionally removes the frontend’s independent 64-character truncation and carries the per-session budget through live state, completion, verbose rendering, and hydrated history.
@@ -51,7 +57,7 @@ These items are adjacent rather than substitutes. Their scope requires row discl
 
 ### Declarative previews: #28719
 
-This PR changes how tools declare and generate meaningful compact labels in `agent/display.py`; it does not remove the gateway’s explicit max or the Ink frontend’s second cap. It may conflict at the `build_tool_label` boundary, but its purpose is complementary. Its author has substantial merged history and automated review calls the design fit good, which is a positive signal, yet the PR remains dirty/conflicting and lacks approval.
+This PR changes how tools declare and generate meaningful compact labels in `agent/display.py`; it does not remove the gateway’s explicit max or the Ink frontend’s second cap. Its label-generation work now overlaps upstream's raw `build_tool_preview` boundary, but its purpose remains complementary. Its author has substantial merged history and automated review calls the design fit good, which is a positive signal, yet the PR remains dirty/conflicting and lacks approval.
 
 ### Narrow-search gap check: #34668
 
