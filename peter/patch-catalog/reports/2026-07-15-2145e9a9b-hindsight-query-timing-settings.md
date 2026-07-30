@@ -17,6 +17,8 @@ Runtime loading preserves legacy read aliases: `previous` maps to `previous_asyn
 
 This is a nomenclature and wait-scope clarification of local patch `b4697a1e0`; its historical public names are not the current recommended configuration surface. The `b4697a1e0` catalogue entry is updated accordingly.
 
+> **2026-07-30 successor:** patch `034d505a4` keeps `recall_query_turn` but removes both Hindsight wait keys. External-provider turn latency is now governed by `memory.external_prefetch_timeout_seconds`; Hindsight's transport `timeout` remains separate. The wait-key behavior described in this historical report is no longer the recommended or active configuration contract.
+
 ## Upstream overlap
 
 | Kind | # | Title | Age | Author signal | Maintainer signal | Files/size | Conflict risk | Merge likelihood |
@@ -36,7 +38,7 @@ This is a nomenclature and wait-scope clarification of local patch `b4697a1e0`; 
 
 ## Recommendation
 
-Keep `2145e9a9b` locally. The refactor is a low-risk compatibility-preserving clarification, but upstream overlap is **very high** in the Hindsight prefetch lifecycle. On rebase, compare first with #62687, #64745, #62870, and #43998; preserve the public `recall_query_turn` (`previous_async|current_sync`) and `recall_query_wait_seconds` contract, old-key read aliases, and the first/resumed/empty-cache bootstrap unless upstream demonstrably covers each behavior. Re-run the complete Hindsight memory suite after any merge touching `prefetch()`, `queue_prefetch()`, worker-result publication, or recall timing settings.
+Keep `2145e9a9b` only for its `recall_query_turn` (`previous_async|current_sync`) nomenclature and query-turn/bootstrap semantics. Patch `034d505a4` supersedes its provider-local wait contract and old wait-key aliases with `memory.external_prefetch_timeout_seconds`. On rebase, compare first with #62687, #64745, #62870, and #43998, but do not resurrect the duplicate Hindsight wait policy. Re-run the complete Hindsight memory suite after any merge touching `prefetch()`, `queue_prefetch()`, worker-result publication, or recall timing settings.
 
 ## Raw authenticated search queries used
 
