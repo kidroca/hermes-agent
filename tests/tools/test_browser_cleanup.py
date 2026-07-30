@@ -1,6 +1,6 @@
 """Regression tests for browser session cleanup and screenshot recovery."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class TestScreenshotPathRecovery:
@@ -31,6 +31,7 @@ class TestBrowserCleanup:
         self.orig_active_sessions = browser_tool._active_sessions.copy()
         self.orig_session_last_activity = browser_tool._session_last_activity.copy()
         self.orig_recording_sessions = browser_tool._recording_sessions.copy()
+        self.orig_cdp_resolutions = browser_tool._cached_cdp_resolutions.copy()
         self.orig_cleanup_done = browser_tool._cleanup_done
 
     def teardown_method(self):
@@ -40,6 +41,8 @@ class TestBrowserCleanup:
         self.browser_tool._session_last_activity.update(self.orig_session_last_activity)
         self.browser_tool._recording_sessions.clear()
         self.browser_tool._recording_sessions.update(self.orig_recording_sessions)
+        self.browser_tool._cached_cdp_resolutions.clear()
+        self.browser_tool._cached_cdp_resolutions.update(self.orig_cdp_resolutions)
         self.browser_tool._cleanup_done = self.orig_cleanup_done
 
     def test_cleanup_browser_clears_tracking_state(self):
@@ -64,6 +67,38 @@ class TestBrowserCleanup:
         assert "task-1" not in browser_tool._session_last_activity
         mock_stop.assert_called_once_with("task-1")
         mock_run.assert_called_once_with("task-1", "close", [], timeout=10)
+
+    def test_cleanup_browser_invalidates_cached_cdp_resolution(self):
+        browser_tool = self.browser_tool
+        raw_url = "http://127.0.0.1:9222"
+        stale_url = "ws://127.0.0.1:9222/devtools/browser/stale"
+        fresh_url = "ws://127.0.0.1:9222/devtools/browser/fresh"
+        responses = []
+        for ws_url in (stale_url, fresh_url):
+            response = Mock()
+            response.raise_for_status.return_value = None
+            response.json.return_value = {"webSocketDebuggerUrl": ws_url}
+            responses.append(response)
+
+        browser_tool._active_sessions["task-1"] = {
+            "session_name": "sess-1",
+            "bb_session_id": None,
+        }
+
+        with (
+            patch("tools.browser_tool.requests.get", side_effect=responses) as mock_get,
+            patch("tools.browser_tool._maybe_stop_recording"),
+            patch(
+                "tools.browser_tool._run_browser_command",
+                return_value={"success": True},
+            ),
+            patch("tools.browser_tool.os.path.exists", return_value=False),
+        ):
+            assert browser_tool._resolve_cdp_override(raw_url) == stale_url
+            browser_tool.cleanup_browser("task-1")
+            assert browser_tool._resolve_cdp_override(raw_url) == fresh_url
+
+        assert mock_get.call_count == 2
 
 
     def test_emergency_cleanup_clears_all_tracking_state(self):

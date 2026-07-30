@@ -6007,6 +6007,9 @@ def cleanup_browser(task_id: Optional[str] = None) -> None:
     if task_id is None:
         task_id = "default"
 
+    # CDP browser UUIDs change when the browser process restarts.
+    _cached_cdp_resolutions.clear()
+
     # Expand to the full set of session keys to reap. For a bare task_id
     # that includes the cloud/primary key + the local sidecar if one exists.
     if _is_local_sidecar_key(task_id):
