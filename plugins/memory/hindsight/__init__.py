@@ -2164,10 +2164,11 @@ class HindsightMemoryProvider(MemoryProvider):
             return self._format_recall(recalled.text)
 
         # Default: return the result the background worker prefetched for the
-        # previous turn (cheap buffer read, capped join).
+        # previous turn. The generic MemoryManager owns the external-provider
+        # deadline, so this provider does not impose a second, shorter timeout.
         if self._prefetch_thread and self._prefetch_thread.is_alive():
             logger.debug("Prefetch: waiting for background thread to complete")
-            self._prefetch_thread.join(timeout=3.0)
+            self._prefetch_thread.join()
         with self._prefetch_lock:
             result = self._prefetch_result
             count = self._prefetch_count

@@ -690,6 +690,15 @@ class TestPrefetch:
         assert "buffered from previous turn" in result
         provider._client.arecall.assert_not_called()
 
+    def test_async_prefetch_wait_has_no_provider_specific_deadline(self, provider):
+        provider._prefetch_thread = MagicMock()
+        provider._prefetch_thread.is_alive.return_value = True
+
+        assert provider.prefetch("follow up") == ""
+
+        provider._prefetch_thread.join.assert_called_once_with()
+        provider._client.arecall.assert_not_called()
+
     def test_prefetch_short_query_consumes_previous_turn_cached_context(self, provider_with_config):
         p = provider_with_config(recall_min_input_chars=20)
         p._prefetch_result = "- memory prefetched for the previous detailed query"
@@ -730,7 +739,7 @@ class TestPrefetch:
         assert p._client.arecall.call_args.kwargs["query"] == "previous detailed question"
         assert p._prefetch_result == ""
 
-    def test_short_query_does_not_cancel_slow_previous_turn_prefetch(self, provider_with_config):
+    def test_short_query_waits_for_slow_previous_turn_prefetch(self, provider_with_config):
         p = provider_with_config(recall_min_input_chars=20)
         started = threading.Event()
         release = threading.Event()
@@ -744,14 +753,11 @@ class TestPrefetch:
         p.queue_prefetch("previous detailed question")
         assert started.wait(timeout=2)
 
-        # This acknowledgement arrives after the prefetch wait expires. It
-        # cannot inject context yet, but must not cancel the prior recall.
-        assert p.prefetch("ok") == ""
-        p.queue_prefetch("ok")
-        release.set()
-        p._prefetch_thread.join(timeout=5)
+        threading.Timer(0.01, release.set).start()
+        result = p.prefetch("ok")
 
-        assert p._prefetch_result == "- Previous turn memory"
+        assert "Previous turn memory" in result
+        assert p._prefetch_result == ""
         assert p._client.arecall.call_args.kwargs["query"] == "previous detailed question"
 
     def test_queue_prefetch_skipped_in_tools_mode(self, provider_with_config):
@@ -1540,6 +1546,11 @@ class TestSystemPrompt:
 
 
 class TestConfigSchema:
+    def test_schema_does_not_expose_provider_specific_recall_wait(self, provider):
+        keys = {field["key"] for field in provider.get_config_schema()}
+
+        assert "recall_query_wait_seconds" not in keys
+
     def test_schema_has_all_new_fields(self, provider):
         schema = provider.get_config_schema()
         keys = {f["key"] for f in schema}

@@ -78,7 +78,10 @@ logger = logging.getLogger(__name__)
 # teardown indefinitely — the worker threads are daemon, so anything still
 # running past this window dies with the interpreter.
 _SYNC_DRAIN_TIMEOUT_S = 5.0
-_EXTERNAL_PREFETCH_TIMEOUT_S = 8.0
+# Default for ``memory.external_prefetch_timeout_seconds``. The agent passes a
+# profile override when configured; direct MemoryManager users retain the
+# upstream fail-open budget.
+_DEFAULT_EXTERNAL_PREFETCH_TIMEOUT_S = 8.0
 
 
 def normalize_tool_schema(schema: Any) -> Optional[Dict[str, Any]]:
@@ -441,7 +444,7 @@ class MemoryManager:
         self._tool_to_provider: Dict[str, MemoryProvider] = {}
         self._has_external: bool = False  # True once a non-builtin provider is added
         self._external_prefetch_timeout = (
-            _EXTERNAL_PREFETCH_TIMEOUT_S
+            _DEFAULT_EXTERNAL_PREFETCH_TIMEOUT_S
             if external_prefetch_timeout is None
             else float(external_prefetch_timeout)
         )

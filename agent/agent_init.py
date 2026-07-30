@@ -1903,6 +1903,7 @@ def init_agent(
     agent._memory_nudge_interval = 10
     agent._turns_since_memory = 0
     agent._iters_since_skill = 0
+    mem_config = {}
     # skip_memory=True skips the external memory *provider*. Flush/background
     # agents can still pass enabled_toolsets=["memory"] so the built-in file
     # store exists and the memory tool does not fail with store=None (#65429).
@@ -1951,7 +1952,11 @@ def init_agent(
             if _mem_provider_name and _mem_provider_name.strip():
                 from agent.memory_manager import MemoryManager as _MemoryManager
                 from plugins.memory import load_memory_provider as _load_mem
-                agent._memory_manager = _MemoryManager()
+                agent._memory_manager = _MemoryManager(
+                    external_prefetch_timeout=mem_config.get(
+                        "external_prefetch_timeout_seconds"
+                    )
+                )
                 _mp = _load_mem(_mem_provider_name)
                 if _mp and _mp.is_available():
                     agent._memory_manager.add_provider(_mp)

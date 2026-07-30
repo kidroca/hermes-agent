@@ -32944,6 +32944,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 next_message = pending
                 next_message_id = None
                 next_channel_prompt = None
+                next_memory_query_message = pending
                 next_session_key = session_key
                 # #60671 — carry the pending event's message_type into the
                 # recursive call so queued voice turns can stream TTS and
@@ -32981,6 +32982,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     next_message_id = self._reply_anchor_for_event(pending_event)
                     next_channel_prompt = getattr(pending_event, "channel_prompt", None)
                     next_message_type = getattr(pending_event, "message_type", None)
+                    next_memory_query_message = getattr(
+                        pending_event, "memory_query_text", None
+                    )
 
                 # Clear the completed streaming marker from the prior logical
                 # turn so the recursive turn's streaming TTS is not suppressed
@@ -33036,6 +33040,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     event_message_id=next_message_id,
                     channel_prompt=next_channel_prompt,
                     message_type=next_message_type,
+                    memory_query_message=next_memory_query_message,
                 )
                 return _preserve_queued_followup_history_offset(result, followup_result)
         finally:
