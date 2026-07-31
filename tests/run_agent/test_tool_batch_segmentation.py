@@ -121,6 +121,37 @@ class TestPlanToolBatchSegments:
         assert _kinds(segments) == ["parallel", "sequential"]
         assert [tc.id for tc in segments[1][1]] == ["c1"]
 
+    def test_background_review_skill_views_are_sequential(self):
+        from tools.skill_provenance import (
+            BACKGROUND_REVIEW,
+            reset_current_write_origin,
+            set_current_write_origin,
+        )
+
+        calls = [
+            _tc("skill_view", '{"name":"first"}', call_id="v1"),
+            _tc("skill_view", '{"name":"second"}', call_id="v2"),
+        ]
+        token = set_current_write_origin(BACKGROUND_REVIEW)
+        try:
+            segments = _plan_tool_batch_segments(calls)
+        finally:
+            reset_current_write_origin(token)
+
+        assert _kinds(segments) == ["sequential"]
+        assert _flatten_ids(segments) == ["v1", "v2"]
+
+    def test_foreground_skill_views_remain_parallel(self):
+        calls = [
+            _tc("skill_view", '{"name":"first"}', call_id="v1"),
+            _tc("skill_view", '{"name":"second"}', call_id="v2"),
+        ]
+
+        segments = _plan_tool_batch_segments(calls)
+
+        assert _kinds(segments) == ["parallel"]
+        assert _flatten_ids(segments) == ["v1", "v2"]
+
 
 
     def test_overlapping_paths_split_across_segments(self, tmp_path, monkeypatch):

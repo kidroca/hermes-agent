@@ -36,6 +36,7 @@ from agent.message_metadata import stamp_message_timestamp
 from agent.tool_result_classification import (
     FILE_MUTATING_TOOL_NAMES as _FILE_MUTATING_TOOLS,
 )
+from tools.skill_provenance import is_background_review
 from tools.threat_patterns import scan_for_threats
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,8 @@ def _plan_tool_batch_segments(tool_calls, *, execution_cwd: Optional[Path] = Non
     batch:
 
     * ``_NEVER_PARALLEL_TOOLS`` (interactive tools) → barrier.
+    * ``skill_view`` during a background review → barrier, so its
+      read-before-write authorization remains in the parent context.
     * Unparseable / non-dict arguments → barrier.
     * Path-scoped tools (``read_file``/``search_files``/``write_file``/
       ``patch``) join a parallel run only when their target path(s) do not
@@ -183,6 +186,7 @@ def _plan_tool_batch_segments(tool_calls, *, execution_cwd: Optional[Path] = Non
     current: list = []
     # (canonical_path, is_writer) reservations for the current parallel run.
     reserved_paths: list[tuple[Path, bool]] = []
+    serialize_skill_views = is_background_review()
 
     def _close_parallel() -> None:
         nonlocal current, reserved_paths
@@ -202,6 +206,10 @@ def _plan_tool_batch_segments(tool_calls, *, execution_cwd: Optional[Path] = Non
         tool_name = tool_call.function.name
 
         if tool_name in _NEVER_PARALLEL_TOOLS:
+            _add_sequential(tool_call)
+            continue
+
+        if serialize_skill_views and tool_name == "skill_view":
             _add_sequential(tool_call)
             continue
 
