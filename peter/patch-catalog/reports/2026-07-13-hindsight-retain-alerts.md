@@ -2,11 +2,11 @@
 
 - Date: 2026-07-13
 - Repo: `/opt/hermes-agent`
-- Patch ref: `95ae1dd56` → `1e6957b87` → `41292ec57` (active on `peter/hermes-patches`)
+- Patch ref: `95ae1dd56` → `1e6957b87` → `41292ec57` → `abd77244c` (active on `peter/hermes-patches`)
 - Branch: `peter/hermes-patches`
 - Motivation: automatic Hindsight retains run in a background writer. Previously a failure only reached the private log, so Peter could lose long-term-memory writes for days without a TUI or Discord signal.
 - Changed files: `agent/agent_init.py`, `plugins/memory/hindsight/__init__.py`, `tests/run_agent/test_memory_provider_init.py`, `tests/plugins/memory/test_hindsight_provider.py`
-- Tests / verification: focused memory-provider, notice-spine, and gateway notice tests passed (`149 passed`) for the original patch; after the 2026-08-03 rebase, the complete Hindsight provider and provider-initialization files passed (`85 passed`), including async acceptance, completion, failure, NotFound, and synchronous recovery regressions.
+- Tests / verification: focused memory-provider, notice-spine, and gateway notice tests passed (`149 passed`) for the original patch; after the 2026-08-03 rebase, the complete Hindsight provider and provider-initialization files passed (`86 passed`), including async acceptance, completion, failure, NotFound, mixed completion/NotFound, and synchronous recovery regressions.
 
 ## Local patch summary
 
@@ -14,7 +14,7 @@ The agent now forwards its existing notice and notice-clear callbacks to memory 
 
 - first failed retain emits a sticky `hindsight.retain` error notice;
 - repeated failures do not spam;
-- a synchronous successful retain, or a server-side async operation confirmed as `completed`, clears the sticky local notice and emits one recovery notice;
+- a synchronous successful retain, or every operation in a tracked server-side async group confirmed as `completed`, clears the sticky local notice and emits one recovery notice;
 - async acceptance alone never clears a failure; `failed`, NotFound, transient status errors, and timed-out operations cannot fabricate recovery;
 - the notification text is intentionally sanitized (`Check Hermes logs`) so raw upstream exception payloads are not pushed into a Discord/group conversation.
 
