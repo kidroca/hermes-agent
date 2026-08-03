@@ -2,7 +2,7 @@
 
 - Date: 2026-07-14
 - Repo: `/opt/hermes-agent`
-- Patch ref: `b0c1ab57c3aa8306b413c753c305598c49d7f065`
+- Patch ref: `b0c1ab57c` (reviewed) → `814d405ab` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed patch inspected; this catalogue pass changes only `peter/patch-catalog/` documentation.
 - Motivation: prevent short acknowledgements/follow-ups from receiving stale Hindsight context while retaining legacy behaviour by default.

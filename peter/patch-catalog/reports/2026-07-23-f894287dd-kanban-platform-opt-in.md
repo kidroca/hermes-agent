@@ -2,7 +2,7 @@
 
 - Date: 2026-07-23
 - Repo: `/opt/hermes-agent`
-- Patch ref: `f894287dda48b28d5bfd8d09c64deb7c274e9c14`
+- Patch ref: `f894287dd` (reviewed) → `93959cbbb` (active)
 - Branch: `peter/hermes-patches`
 - Local status: source patch committed as `f894287dd`; catalogue update left uncommitted at dispatch
 - Motivation: make an explicit `platform_toolsets.<platform>: [kanban, ...]` selection sufficient to expose native Kanban tools on that platform while keeping Kanban hidden from the normal picker, non-configurable there, default-off, and isolated from unselected platforms.

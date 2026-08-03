@@ -2,7 +2,7 @@
 
 - Date: 2026-07-25
 - Repo: `/opt/hermes-agent`
-- Patch ref: original `5c79641a34664e261273df40849022b51d2c8ded`; rebased `3ddcb19a6`
+- Patch ref: original `5c79641a3`; reviewed rebase `3ddcb19a6` → `3369b6147` (active)
 - Branch: `peter/hermes-patches`
 - Local status: rebased onto `main` on 2026-07-25 with upstream schema-v23 overlap removed
 - Motivation: keep one canonical searchable session database while preventing routine `hermes doctor` runs from scanning the entire multi-gigabyte store.

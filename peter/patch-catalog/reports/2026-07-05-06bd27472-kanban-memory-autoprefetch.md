@@ -2,7 +2,7 @@
 
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
-- Patch ref: 06bd27472301adef620758196af322cbf3ab9b12 (`06bd27472`)
+- Patch ref: `06bd27472` (reviewed) → `2f22c5b31` (active)
 - Branch: `peter/hermes-patches`
 - Local status: branch ahead of `peter/peter/hermes-patches` by 3 commits at inspection time; no source changes made by this report task.
 - Motivation:
