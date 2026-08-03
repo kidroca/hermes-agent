@@ -1382,6 +1382,34 @@ class TestRetainFailureNotices:
         assert cleared == []
         assert [notice.level for notice in notices] == ["error"]
 
+    def test_mixed_completed_and_not_found_operations_do_not_recover(self, provider):
+        from hindsight_client_api.exceptions import NotFoundException
+
+        notices = []
+        cleared = []
+        provider._notice_callback = notices.append
+        provider._notice_clear_callback = cleared.append
+        provider._emit_retain_failure_notice(RuntimeError("earlier failure"))
+        provider._client.operations = MagicMock()
+
+        async def _status(*, operation_id, **_kwargs):
+            if operation_id == "op-completed":
+                return SimpleNamespace(status="completed")
+            raise NotFoundException(status=404, reason="gone")
+
+        provider._client.operations.get_operation_status = AsyncMock(
+            side_effect=_status
+        )
+        provider._pending_retain_ops = {"op-completed", "op-gone"}
+
+        assert provider._wait_for_server_retain_ops(
+            time.monotonic() + 1.0, 1.0
+        ) is True
+
+        assert provider._retain_failure_alerted is True
+        assert cleared == []
+        assert [notice.level for notice in notices] == ["error"]
+
     def test_failed_switch_flush_stays_failed_until_a_real_retain_succeeds(
         self, provider_with_config
     ):

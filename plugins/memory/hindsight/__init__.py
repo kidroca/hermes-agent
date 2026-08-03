@@ -1545,6 +1545,7 @@ class HindsightMemoryProvider(MemoryProvider):
         """
         saw_completed = False
         saw_failed = False
+        saw_not_found = False
         while True:
             with self._pending_retain_ops_lock:
                 bank_id = getattr(self, "_retain_ops_bank_id", "") or self._bank_id
@@ -1572,6 +1573,8 @@ class HindsightMemoryProvider(MemoryProvider):
                     self._emit_retain_failure_notice(
                         RuntimeError(f"Hindsight retain operation {op_id} failed")
                     )
+                elif status == "not_found":
+                    saw_not_found = True
 
             if expired:
                 with self._pending_retain_ops_lock:
@@ -1593,7 +1596,7 @@ class HindsightMemoryProvider(MemoryProvider):
                 # Recovery requires positive completion evidence for the whole
                 # tracked group. Async acceptance, NotFound, failure, and timeout
                 # are not proof that a memory write became durable.
-                if saw_completed and not saw_failed:
+                if saw_completed and not saw_failed and not saw_not_found:
                     self._emit_retain_success_notice()
                 return True
             if deadline is not None and time.monotonic() >= deadline:
