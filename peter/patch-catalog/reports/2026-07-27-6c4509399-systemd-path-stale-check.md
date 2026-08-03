@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-27
 - **Repo:** `NousResearch/hermes-agent` (Peter's local patch stack)
-- **Patch ref:** `6c4509399` → `0ee8c977f` → `035e797b0` → `b6d6f2e75` (active on `peter/hermes-patches`)
+- **Patch ref:** `6c4509399` → `0ee8c977f` → `035e797b0` → `b6d6f2e75` → `c4f46a0d9` (active on `peter/hermes-patches`)
 - **Branch:** `peter/hermes-patches`
 - **Local status:** retained in Peter's local patch stack
 - **Motivation:** `hermes gateway status --system` falsely reported a current unit as outdated on WSL because generated systemd units capture an ambient shell PATH whose Android/Windows interop entries differ across login, sudo, and service-generation contexts.
@@ -41,7 +41,7 @@ This report is worth watching because it demonstrates operational harm from fals
 
 ## Recommendation
 
-**Keep active patch `b6d6f2e75` locally and watch #62210 closely.** Expect very high mechanical conflict if it lands. Drop or reconcile the local patch only after upstream preserves meaningful non-drive PATH drift, arbitrary `/mnt` mounts, missing/combined assignments, and all non-PATH directives. Track #46276 separately; do not broaden this comparison mask to solve its non-WSL cases without deterministic PATH generation or explicit required-entry validation.
+**Keep active patch `c4f46a0d9` locally and watch #62210 closely.** Expect very high mechanical conflict if it lands. Drop or reconcile the local patch only after upstream preserves meaningful non-drive PATH drift, arbitrary `/mnt` mounts, missing/combined assignments, and all non-PATH directives. Track #46276 separately; do not broaden this comparison mask to solve its non-WSL cases without deterministic PATH generation or explicit required-entry validation.
 
 ## Raw search queries used
 
