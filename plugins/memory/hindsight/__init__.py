@@ -1445,13 +1445,15 @@ class HindsightMemoryProvider(MemoryProvider):
         with self._pending_retain_ops_lock:
             self._pending_retain_ops.update(ids)
 
-    def _is_retain_op_complete(self, bank_id: str, op_id: str) -> bool:
-        """Return True when a server-side async retain op is done (or gone).
+    def _retain_op_status(self, bank_id: str, op_id: str) -> str:
+        """Return a normalized server-side async retain operation status.
 
         ``get_operation_status`` returns ``completed``/``failed`` for a known
         op; completed ops are evicted server-side, so a NotFound (404) also
-        means "no longer pending" and is treated as done. Transient errors
-        return False so the caller keeps waiting until its deadline.
+        means "no longer pending". Transient errors remain ``pending`` so the
+        caller keeps waiting until its deadline. Keeping terminal states
+        distinct prevents an accepted or failed async write from fabricating a
+        recovery notice.
         """
         from hindsight_client_api.exceptions import NotFoundException
 
@@ -1462,12 +1464,20 @@ class HindsightMemoryProvider(MemoryProvider):
                 )
             )
         except NotFoundException:
-            return True
+            return "not_found"
         except Exception as exc:
             logger.debug("Prefetch: operation status check failed for %s: %s", op_id, exc)
-            return False
+            return "pending"
         status = str(getattr(resp, "status", "") or "").lower()
-        return status in {"completed", "failed"}
+        return status if status in {"completed", "failed"} else "pending"
+
+    def _is_retain_op_complete(self, bank_id: str, op_id: str) -> bool:
+        """Compatibility wrapper for callers that only need terminality."""
+        return self._retain_op_status(bank_id, op_id) in {
+            "completed",
+            "failed",
+            "not_found",
+        }
 
     def _wait_for_retains_drained(self, timeout: float) -> bool:
         """Block up to *timeout* seconds for the just-completed turn's retain to
@@ -1533,6 +1543,8 @@ class HindsightMemoryProvider(MemoryProvider):
         round trips per op are bounded (~20 over a 10s budget), unlike the
         cheap 0.05s local queue-drain poll in _wait_for_retains_drained.
         """
+        saw_completed = False
+        saw_failed = False
         while True:
             with self._pending_retain_ops_lock:
                 bank_id = getattr(self, "_retain_ops_bank_id", "") or self._bank_id
@@ -1550,8 +1562,16 @@ class HindsightMemoryProvider(MemoryProvider):
                 if deadline is not None and time.monotonic() >= deadline:
                     expired = True
                     break
-                if self._is_retain_op_complete(bank_id, op_id):
+                status = self._retain_op_status(bank_id, op_id)
+                if status in {"completed", "failed", "not_found"}:
                     done.add(op_id)
+                if status == "completed":
+                    saw_completed = True
+                elif status == "failed":
+                    saw_failed = True
+                    self._emit_retain_failure_notice(
+                        RuntimeError(f"Hindsight retain operation {op_id} failed")
+                    )
 
             if expired:
                 with self._pending_retain_ops_lock:
@@ -1570,6 +1590,11 @@ class HindsightMemoryProvider(MemoryProvider):
                 self._pending_retain_ops.difference_update(done)
                 still_pending = bool(self._pending_retain_ops)
             if not still_pending:
+                # Recovery requires positive completion evidence for the whole
+                # tracked group. Async acceptance, NotFound, failure, and timeout
+                # are not proof that a memory write became durable.
+                if saw_completed and not saw_failed:
+                    self._emit_retain_success_notice()
                 return True
             if deadline is not None and time.monotonic() >= deadline:
                 with self._pending_retain_ops_lock:
@@ -1602,7 +1627,11 @@ class HindsightMemoryProvider(MemoryProvider):
                     return
                 try:
                     job()
-                    self._emit_retain_success_notice()
+                    # For retain_async=True, job() success means only that the
+                    # server accepted the write. Recovery is emitted later when
+                    # operation polling reports a real completion.
+                    if not self._retain_async:
+                        self._emit_retain_success_notice()
                 except Exception as exc:
                     logger.warning("Hindsight retain failed: %s", exc, exc_info=True)
                     self._emit_retain_failure_notice(exc)

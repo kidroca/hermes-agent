@@ -1300,6 +1300,88 @@ class TestRetainFailureNotices:
         assert notices[0].key == "hindsight.retain"
         assert notices[0].text == "✕ Hindsight memory writes failed. Check Hermes logs."
 
+    def test_async_acceptance_does_not_clear_existing_failure(self, provider):
+        notices = []
+        cleared = []
+        provider._notice_callback = notices.append
+        provider._notice_clear_callback = cleared.append
+        provider._client.aretain_batch = AsyncMock(
+            return_value=SimpleNamespace(
+                operation_id="op-accepted",
+                operation_ids=None,
+            )
+        )
+        provider._emit_retain_failure_notice(RuntimeError("earlier failure"))
+
+        provider.sync_turn("hello", "hi")
+        provider._retain_queue.join()
+        provider.shutdown()
+
+        assert provider._retain_failure_alerted is True
+        assert cleared == []
+        assert [notice.level for notice in notices] == ["error"]
+
+    def test_completed_async_operation_reports_recovery(self, provider):
+        notices = []
+        cleared = []
+        provider._notice_callback = notices.append
+        provider._notice_clear_callback = cleared.append
+        provider._emit_retain_failure_notice(RuntimeError("earlier failure"))
+        provider._client.operations = MagicMock()
+        provider._client.operations.get_operation_status = AsyncMock(
+            return_value=SimpleNamespace(status="completed")
+        )
+        provider._pending_retain_ops = {"op-completed"}
+
+        assert provider._wait_for_server_retain_ops(
+            time.monotonic() + 1.0, 1.0
+        ) is True
+
+        assert provider._retain_failure_alerted is False
+        assert cleared == ["hindsight.retain"]
+        assert [notice.level for notice in notices] == ["error", "success"]
+
+    def test_failed_async_operation_reports_failure_without_recovery(self, provider):
+        notices = []
+        cleared = []
+        provider._notice_callback = notices.append
+        provider._notice_clear_callback = cleared.append
+        provider._client.operations = MagicMock()
+        provider._client.operations.get_operation_status = AsyncMock(
+            return_value=SimpleNamespace(status="failed")
+        )
+        provider._pending_retain_ops = {"op-failed"}
+
+        assert provider._wait_for_server_retain_ops(
+            time.monotonic() + 1.0, 1.0
+        ) is True
+
+        assert provider._retain_failure_alerted is True
+        assert cleared == []
+        assert [notice.level for notice in notices] == ["error"]
+
+    def test_not_found_async_operation_does_not_fabricate_recovery(self, provider):
+        from hindsight_client_api.exceptions import NotFoundException
+
+        notices = []
+        cleared = []
+        provider._notice_callback = notices.append
+        provider._notice_clear_callback = cleared.append
+        provider._emit_retain_failure_notice(RuntimeError("earlier failure"))
+        provider._client.operations = MagicMock()
+        provider._client.operations.get_operation_status = AsyncMock(
+            side_effect=NotFoundException(status=404, reason="gone")
+        )
+        provider._pending_retain_ops = {"op-gone"}
+
+        assert provider._wait_for_server_retain_ops(
+            time.monotonic() + 1.0, 1.0
+        ) is True
+
+        assert provider._retain_failure_alerted is True
+        assert cleared == []
+        assert [notice.level for notice in notices] == ["error"]
+
     def test_failed_switch_flush_stays_failed_until_a_real_retain_succeeds(
         self, provider_with_config
     ):
