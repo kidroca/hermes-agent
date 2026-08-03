@@ -2,8 +2,8 @@
 
 - Date: 2026-07-31
 - Repo: `NousResearch/hermes-agent`
-- Patch ref: `52b50c157fee72ced745378e5de0a762f6d6cafb`
-- Branch: `peter/hermes-patches` (authored on `peter/curator-parallel-skill-view`)
+- Patch ref: `52b50c157fee72ced745378e5de0a762f6d6cafb` → `652b895c7` (active on `peter/hermes-patches`)
+- Branch: `peter/hermes-patches` (originally authored on `peter/curator-parallel-skill-view`)
 - Local status: committed local patch and committed catalogue entry
 - Motivation: `hermes curator run --consolidate` could execute background-review `skill_view` calls in copied parallel worker contexts. The read-before-write marks written to a `ContextVar` did not flow back to the parent context, so later `skill_manage` patches were falsely rejected and repeated failures could trigger `same_tool_failure_halt`.
 - Changed files: `agent/tool_dispatch_helpers.py`; `tests/run_agent/test_tool_batch_segmentation.py`
@@ -31,7 +31,7 @@ Age is measured at 2026-07-31. Search and item metadata were fetched with authen
 
 The PR body describes the same execution-model mismatch: each tool call runs in a copied `Context`, while `skill_view()` replaced an immutable `frozenset` only inside that copy. Its solution changes the mark store to a fresh per-review mutable, lock-protected object shared by copied contexts, with tests for cross-context authorization and review isolation.
 
-That differs from `52b50c157`: the local patch avoids the defect by serializing background-review `skill_view` dispatch, whereas #73975 makes the authorization state itself compatible with copied/concurrent contexts. Because #73975 preserves concurrency and fixes later-turn/copied-context cases beyond one batch planner, it is the stronger upstream-shaped solution if its isolation and locking tests remain valid. There is no current line-level conflict because the two patches touch different source and test files; the risk is semantic redundancy after merge.
+That differs from the local patch (`52b50c157`, now active as `652b895c7`): it avoids the defect by serializing background-review `skill_view` dispatch, whereas #73975 makes the authorization state itself compatible with copied/concurrent contexts. Because #73975 preserves concurrency and fixes later-turn/copied-context cases beyond one batch planner, it is the stronger upstream-shaped solution if its isolation and locking tests remain valid. The rebase adapted the local patch to upstream's reader/writer-aware batch planner without changing this contract. The risk remains semantic redundancy after merge.
 
 The strongest positive signal is the repository sweeper comment from `teknium1`, which calls the fix focused, finds no substantive correctness issue, and rates salvageability high. This is automated triage and the account's API association is only `CONTRIBUTOR`; it must not be represented as formal maintainer approval. No submitted review exists.
 
@@ -45,7 +45,7 @@ Authenticated search found #53959 about fallback strategies for `same_tool_failu
 
 ## Recommendation
 
-Keep `52b50c157` temporarily because it is narrow, tested, and has no present line-level collision with the upstream candidate. Watch #73975 closely. If #73975 merges, verify curator consolidation with parallel `skill_view` calls and the background-review read-before-write tests on the merged implementation; then drop the local serialization patch if the shared mark store preserves authorization across copied contexts without cross-review leakage. If both are retained during a transition, expect little textual conflict but unnecessary loss of background-review read parallelism.
+Keep active patch `652b895c7` temporarily because it is narrow and tested. Watch #73975 closely. If #73975 merges, verify curator consolidation with parallel `skill_view` calls and the background-review read-before-write tests on the merged implementation; then drop the local serialization patch if the shared mark store preserves authorization across copied contexts without cross-review leakage. If both are retained during a transition, expect little textual conflict but unnecessary loss of background-review read parallelism.
 
 ## Raw search queries used
 
