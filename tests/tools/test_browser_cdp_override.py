@@ -69,25 +69,6 @@ class TestResolveCdpOverride:
         assert "access_token=***" in logged_version_url
         assert "access_token=***" in logged_error
         assert logged_version_url.startswith("https://cdp.example")
-    def test_returns_empty_when_discovery_fails_without_raw_fallback(self):
-        from tools.browser_tool import _resolve_cdp_override
-
-        with patch("tools.browser_tool.requests.get", side_effect=RuntimeError("boom")):
-            assert _resolve_cdp_override(HTTP_URL, fallback_to_raw=False) == ""
-
-    def test_uses_short_timeout_for_explicit_startup_probe(self):
-        from tools.browser_tool import _resolve_cdp_override
-
-        response = Mock()
-        response.raise_for_status.return_value = None
-        response.json.return_value = {"webSocketDebuggerUrl": WS_URL}
-
-        with patch("tools.browser_tool.requests.get", return_value=response) as mock_get:
-            resolved = _resolve_cdp_override(HTTP_URL, timeout=0.5, fallback_to_raw=False)
-
-        assert resolved == WS_URL
-        mock_get.assert_called_once_with(VERSION_URL, timeout=0.5)
-
 
     def test_returns_empty_when_discovery_fails_without_raw_fallback(self):
         from tools.browser_tool import _resolve_cdp_override
