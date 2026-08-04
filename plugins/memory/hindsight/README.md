@@ -60,7 +60,8 @@ Config file: `~/.hermes/hindsight/config.json`
 | Key | Default | Description |
 |-----|---------|-------------|
 | `bank_id` | `hermes` | Memory bank name (static fallback used when `bank_id_template` is unset or resolves empty) |
-| `bank_id_template` | — | Optional template to derive the bank name dynamically. Placeholders: `{profile}`, `{workspace}`, `{platform}`, `{user}`, `{session}`. Example: `hermes-{profile}` isolates memory per active Hermes profile. Empty placeholders collapse cleanly (e.g. `hermes-{user}` with no user becomes `hermes`). |
+| `bank_id_template` | — | Optional template to derive the bank name dynamically. Placeholders: `{profile}`, `{workspace}`, `{gitProject}`, `{platform}`, `{user}`, `{session}`. Example: `project::{gitProject}` routes each repository to its own bank. Empty placeholders collapse cleanly; unresolved `{gitProject}` uses `bank_id` instead. |
+| `git_project` | — | Explicit `{gitProject}` override. Local workspaces resolve the Git common-repository name automatically (shared by linked worktrees); remote workspaces fall back to the configured path basename unless this override is set. |
 | `bank_mission` | — | Reflect mission (identity/framing for reflect reasoning). Applied via Banks API. |
 | `bank_retain_mission` | — | Retain mission (steers what gets extracted). Applied via Banks API. |
 

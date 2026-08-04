@@ -9,6 +9,7 @@ import agent.runtime_cwd as rt
 from agent.runtime_cwd import (
     clear_session_cwd,
     resolve_agent_cwd,
+    resolve_agent_workspace,
     resolve_context_cwd,
     set_session_cwd,
 )
@@ -36,6 +37,26 @@ class TestResolveAgentCwd:
         monkeypatch.setattr(rt.os, "getcwd", _raise_oserror)
         with pytest.raises(OSError):
             resolve_agent_cwd()
+
+
+class TestResolveAgentWorkspace:
+    def test_preserves_remote_configured_cwd_that_does_not_exist_locally(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("TERMINAL_CWD", raising=False)
+
+        assert (
+            resolve_agent_workspace("/Users/kidroca/workspace-hermes/lad-hermes")
+            == "/Users/kidroca/workspace-hermes/lad-hermes"
+        )
+
+    def test_session_workspace_wins_over_configured_cwd(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("TERMINAL_CWD", raising=False)
+        token = set_session_cwd(str(tmp_path))
+        try:
+            assert resolve_agent_workspace("/configured/project") == str(tmp_path)
+        finally:
+            rt._SESSION_CWD.reset(token)
 
 
 class TestResolveContextCwd:

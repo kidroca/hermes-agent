@@ -9,6 +9,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import sys
 import threading
 import time
@@ -31,6 +32,7 @@ from plugins.memory.hindsight import (
     _build_embedded_profile_env,
     _normalize_observation_scopes,
     _normalize_retain_tags,
+    _resolve_git_project,
     _resolve_bank_id_template,
     _sanitize_bank_segment,
     _WRITER_SENTINEL,
@@ -1649,6 +1651,16 @@ class TestSystemPrompt:
         assert "hindsight_recall" in block
         assert "automatically injected" in block
 
+    def test_context_mode_does_not_claim_injection_when_auto_recall_is_disabled(
+        self, provider_with_config
+    ):
+        provider = provider_with_config(memory_mode="context", auto_recall=False)
+
+        block = provider.system_prompt_block()
+
+        assert "Automatic recall is disabled" in block
+        assert "automatically injected" not in block
+
 
 # ---------------------------------------------------------------------------
 # Config schema tests
@@ -1666,7 +1678,7 @@ class TestConfigSchema:
         keys = {f["key"] for f in schema}
         expected_keys = {
             "mode", "api_url", "api_key", "llm_provider", "llm_api_key",
-            "llm_model", "bank_id", "bank_id_template", "bank_mission", "bank_retain_mission",
+            "llm_model", "bank_id", "bank_id_template", "git_project", "bank_mission", "bank_retain_mission",
             "recall_budget", "memory_mode", "recall_prefetch_method",
             "retain_tags", "retain_source",
             "retain_user_prefix", "retain_assistant_prefix",
@@ -1729,6 +1741,102 @@ class TestBankIdTemplate:
         )
         assert p._bank_id == "hermes-coder"
         assert p._bank_id_template == "hermes-{profile}"
+
+    def test_resolve_git_project_uses_repository_root_from_nested_path(self, tmp_path):
+        repo = tmp_path / "My Project"
+        nested = repo / "src" / "pkg"
+        nested.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+
+        assert _resolve_git_project(str(nested)) == "My-Project"
+
+    def test_resolve_git_project_collapses_linked_worktrees_to_common_repo(self, tmp_path):
+        repo = tmp_path / "Canonical Project"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        (repo / "README.md").write_text("test\n")
+        subprocess.run(["git", "-C", str(repo), "add", "README.md"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "initial",
+            ],
+            check=True,
+        )
+        worktree = tmp_path / "Feature Checkout"
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                str(worktree),
+            ],
+            check=True,
+        )
+
+        assert _resolve_git_project(str(worktree)) == "Canonical-Project"
+
+    def test_resolve_git_project_uses_remote_workspace_basename(self):
+        assert (
+            _resolve_git_project("/Users/kidroca/workspace-hermes/lad-hermes")
+            == "lad-hermes"
+        )
+
+    def test_resolve_git_project_prefers_explicit_override(self):
+        assert _resolve_git_project("/wrong/path", explicit="Canonical Project") == "Canonical-Project"
+
+    def test_provider_resolves_git_project_template(self, tmp_path, monkeypatch):
+        repo = tmp_path / "actual-project"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        config = {
+            "mode": "cloud",
+            "apiKey": "k",
+            "api_url": "http://x",
+            "bank_id": "fallback-bank",
+            "bank_id_template": "project::{gitProject}",
+        }
+        config_path = tmp_path / "hindsight" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(json.dumps(config))
+        monkeypatch.setattr("plugins.memory.hindsight.get_hermes_home", lambda: tmp_path)
+
+        p = HindsightMemoryProvider()
+        p.initialize(session_id="s1", platform="cli", agent_workspace=str(repo))
+
+        assert p._bank_id == "project::actual-project"
+
+    def test_provider_falls_back_when_git_project_cannot_be_resolved(
+        self, tmp_path, monkeypatch
+    ):
+        config = {
+            "mode": "cloud",
+            "apiKey": "k",
+            "api_url": "http://x",
+            "bank_id": "fallback-bank",
+            "bank_id_template": "project::{gitProject}",
+        }
+        config_path = tmp_path / "hindsight" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(json.dumps(config))
+        monkeypatch.setattr("plugins.memory.hindsight.get_hermes_home", lambda: tmp_path)
+
+        p = HindsightMemoryProvider()
+        p.initialize(session_id="s1", platform="cli", agent_workspace="")
+
+        assert p._bank_id == "fallback-bank"
 
 
 # ---------------------------------------------------------------------------

@@ -60,6 +60,22 @@ CONFIG_SCHEMA = ProviderConfigSchema(
             inline=True,
         ),
         ProviderField(
+            key="bank_id_template",
+            label="Bank ID template",
+            kind=KIND_TEXT,
+            default="",
+            description="Dynamic bank template; supports {gitProject}, {profile}, {workspace}, {platform}, {user}, and {session}.",
+            inline=True,
+        ),
+        ProviderField(
+            key="git_project",
+            label="Git project override",
+            kind=KIND_TEXT,
+            default="",
+            description="Optional explicit value for {gitProject}, mainly for remote workspaces whose configured path is not the repository root.",
+            inline=True,
+        ),
+        ProviderField(
             key="recall_budget",
             label="Recall budget",
             kind=KIND_SELECT,

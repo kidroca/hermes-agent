@@ -38,12 +38,14 @@ import json
 import logging
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Dict, List, Optional
 
 from agent.secret_scope import get_secret
@@ -787,12 +789,54 @@ def _sanitize_bank_segment(value: str) -> str:
     return "".join(out).strip("-_")
 
 
+def _resolve_git_project(workspace: str, *, explicit: str = "") -> str:
+    """Resolve a stable project name from an explicit value or workspace path.
+
+    Local workspaces use the Git common directory so linked worktrees share
+    one project identity. Remote workspace paths are not visible on the Hermes
+    host, so their final path segment is the safe, deterministic fallback.
+    """
+    explicit_value = _sanitize_bank_segment(explicit)
+    if explicit_value:
+        return explicit_value
+
+    raw_workspace = str(workspace or "").strip()
+    if not raw_workspace:
+        return ""
+
+    local_path = Path(raw_workspace).expanduser()
+    if local_path.is_dir():
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(local_path), "rev-parse", "--git-common-dir"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                common_dir = Path(result.stdout.strip())
+                if not common_dir.is_absolute():
+                    common_dir = local_path / common_dir
+                common_dir = common_dir.resolve()
+                project_path = common_dir.parent if common_dir.name == ".git" else common_dir
+                project_name = _sanitize_bank_segment(project_path.name)
+                if project_name:
+                    return project_name
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    path_type = PureWindowsPath if "\\" in raw_workspace else PurePosixPath
+    return _sanitize_bank_segment(path_type(raw_workspace.rstrip("/\\")).name)
+
+
 def _resolve_bank_id_template(template: str, fallback: str, **placeholders: str) -> str:
     """Resolve a bank_id template string with the given placeholders.
 
     Supported placeholders (each is sanitized before substitution):
       {profile}   — active Hermes profile name (from agent_identity)
-      {workspace} — Hermes workspace name (from agent_workspace)
+      {workspace} — Hermes workspace path/name (from agent_workspace)
+      {gitProject} — Git root name, explicit override, or workspace basename
       {platform}  — "cli", "telegram", "discord", etc.
       {user}      — platform user id (gateway sessions)
       {session}   — current session id
@@ -1284,7 +1328,8 @@ class HindsightMemoryProvider(MemoryProvider):
             {"key": "llm_api_key", "description": "LLM API key (optional for openai_compatible)", "secret": True, "env_var": "HINDSIGHT_LLM_API_KEY", "when": {"mode": "local_embedded"}},
             {"key": "llm_model", "description": "LLM model", "default": "gpt-4o-mini", "default_from": {"field": "llm_provider", "map": _PROVIDER_DEFAULT_MODELS}, "when": {"mode": "local_embedded"}},
             {"key": "bank_id", "description": "Memory bank name (static fallback when bank_id_template is unset)", "default": "hermes"},
-            {"key": "bank_id_template", "description": "Optional template to derive bank_id dynamically. Placeholders: {profile}, {workspace}, {platform}, {user}, {session}. Example: hermes-{profile}", "default": ""},
+            {"key": "bank_id_template", "description": "Optional template to derive bank_id dynamically. Placeholders: {profile}, {workspace}, {gitProject}, {platform}, {user}, {session}. Example: project::{gitProject}", "default": ""},
+            {"key": "git_project", "description": "Optional explicit project identity used by {gitProject}; useful when a remote workspace path is not the repository root", "default": ""},
             {"key": "bank_mission", "description": "Mission/purpose description for the memory bank"},
             {"key": "bank_retain_mission", "description": "Custom extraction prompt for memory retention"},
             {"key": "recall_budget", "description": "Recall thoroughness", "default": "mid", "choices": ["low", "mid", "high"]},
@@ -1891,15 +1936,28 @@ class HindsightMemoryProvider(MemoryProvider):
         banks = cfg_get(self._config, "banks", "hermes", default={})
         static_bank_id = self._config.get("bank_id") or banks.get("bankId", "hermes")
         self._bank_id_template = self._config.get("bank_id_template", "") or ""
-        self._bank_id = _resolve_bank_id_template(
-            self._bank_id_template,
-            fallback=static_bank_id,
-            profile=self._agent_identity,
-            workspace=self._agent_workspace,
-            platform=self._platform,
-            user=self._user_id,
-            session=self._session_id,
+        git_project = _resolve_git_project(
+            self._agent_workspace,
+            explicit=str(self._config.get("git_project") or ""),
         )
+        if "{gitProject}" in self._bank_id_template and not git_project:
+            logger.warning(
+                "Cannot resolve {gitProject} for workspace %r; using fallback bank %r",
+                self._agent_workspace,
+                static_bank_id,
+            )
+            self._bank_id = static_bank_id
+        else:
+            self._bank_id = _resolve_bank_id_template(
+                self._bank_id_template,
+                fallback=static_bank_id,
+                profile=self._agent_identity,
+                workspace=self._agent_workspace,
+                gitProject=git_project,
+                platform=self._platform,
+                user=self._user_id,
+                session=self._session_id,
+            )
         budget = self._config.get("recall_budget") or self._config.get("budget") or banks.get("budget", "mid")
         self._budget = budget if budget in _VALID_BUDGETS else "mid"
 
@@ -2067,10 +2125,15 @@ class HindsightMemoryProvider(MemoryProvider):
 
     def system_prompt_block(self) -> str:
         if self._memory_mode == "context":
+            recall_status = (
+                "Relevant memories are automatically injected into context."
+                if self._auto_recall
+                else "Automatic recall is disabled."
+            )
             return (
                 f"# Hindsight Memory\n"
                 f"Active (context mode). Bank: {self._bank_id}, budget: {self._budget}.\n"
-                f"Relevant memories are automatically injected into context."
+                f"{recall_status}"
             )
         if self._memory_mode == "tools":
             return (
@@ -2079,10 +2142,15 @@ class HindsightMemoryProvider(MemoryProvider):
                 f"Use hindsight_recall to search, hindsight_reflect for synthesis, "
                 f"hindsight_retain to store facts."
             )
+        recall_status = (
+            "Relevant memories are automatically injected into context. "
+            if self._auto_recall
+            else "Automatic recall is disabled. "
+        )
         return (
             f"# Hindsight Memory\n"
             f"Active. Bank: {self._bank_id}, budget: {self._budget}.\n"
-            f"Relevant memories are automatically injected into context. "
+            f"{recall_status}"
             f"Use hindsight_recall to search, hindsight_reflect for synthesis, "
             f"hindsight_retain to store facts."
         )

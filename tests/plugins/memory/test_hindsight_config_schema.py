@@ -17,6 +17,8 @@ def test_hindsight_is_declared():
         "api_key",
         "api_url",
         "bank_id",
+        "bank_id_template",
+        "git_project",
         "recall_budget",
     }
 

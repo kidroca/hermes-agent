@@ -2017,9 +2017,15 @@ def init_agent(
                     # Profile identity for per-profile provider scoping
                     try:
                         from hermes_cli.profiles import get_active_profile_name
+                        from agent.runtime_cwd import resolve_agent_workspace
                         _profile = get_active_profile_name()
                         _init_kwargs["agent_identity"] = _profile
-                        _init_kwargs["agent_workspace"] = "hermes"
+                        _terminal_cfg = _agent_cfg.get("terminal", {})
+                        if not isinstance(_terminal_cfg, dict):
+                            _terminal_cfg = {}
+                        _init_kwargs["agent_workspace"] = resolve_agent_workspace(
+                            _terminal_cfg.get("cwd")
+                        )
                     except Exception:
                         pass
                     # NOTE: status_callback (for the deterministic retain

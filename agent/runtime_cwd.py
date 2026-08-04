@@ -98,6 +98,25 @@ def resolve_agent_cwd() -> Path:
     return Path(os.getcwd())
 
 
+def resolve_agent_workspace(configured_cwd: str | None = None) -> str:
+    """Return the logical workspace path without requiring host visibility.
+
+    Remote backends use paths that do not exist on the Hermes host. Memory
+    routing still needs that identity, so unlike :func:`resolve_agent_cwd`
+    this resolver preserves an explicit remote path verbatim.
+    """
+    override = _session_cwd_override()
+    if override:
+        return override
+    raw = os.environ.get("TERMINAL_CWD", "").strip()
+    if raw:
+        return raw
+    configured = str(configured_cwd or "").strip()
+    if configured:
+        return configured
+    return os.getcwd()
+
+
 def resolve_context_cwd() -> Path | None:
     # None means "no configured cwd": build_context_files_prompt then falls back
     # to the launch dir (os.getcwd()), correct for a local CLI launched inside a
