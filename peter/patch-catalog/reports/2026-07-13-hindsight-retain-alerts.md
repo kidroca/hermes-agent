@@ -2,7 +2,7 @@
 
 - Date: 2026-07-13
 - Repo: `/opt/hermes-agent`
-- Patch ref: `95ae1dd56` → `1e6957b87` → `41292ec57` → `abd77244c` (active on `peter/hermes-patches`)
+- Patch ref: `95ae1dd56` → `1e6957b87` → `41292ec57` → `abd77244c` (pre-2026-08-09 active) → `2e4fce9b45` + `5ab7c087f8` + `2dd15871f7` (active)
 - Branch: `peter/hermes-patches`
 - Motivation: automatic Hindsight retains run in a background writer. Previously a failure only reached the private log, so Peter could lose long-term-memory writes for days without a TUI or Discord signal.
 - Changed files: `agent/agent_init.py`, `plugins/memory/hindsight/__init__.py`, `tests/run_agent/test_memory_provider_init.py`, `tests/plugins/memory/test_hindsight_provider.py`

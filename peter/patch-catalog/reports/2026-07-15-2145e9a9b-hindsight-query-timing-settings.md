@@ -2,7 +2,7 @@
 
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
-- Patch ref: `2145e9a9b` (reviewed) → `1ec1958a5` (active)
+- Patch ref: `2145e9a9b` (reviewed) → `1ec1958a5` (pre-2026-08-09 active) → `2f4203b7b8` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed patch inspected; this catalogue pass changes only `peter/patch-catalog/` documentation.
 - Motivation: replace ambiguous public Hindsight timing names with names that state both the queried turn and synchronization behavior, while retaining existing profile compatibility and the established first/resumed/empty-cache recall bootstrap.

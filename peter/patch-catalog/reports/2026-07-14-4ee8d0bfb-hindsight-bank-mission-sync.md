@@ -2,7 +2,7 @@
 
 - Date: 2026-07-14
 - Repo: `/opt/hermes-agent`
-- Patch ref: `4ee8d0bfb` (reviewed) → `40b1bb407` (active)
+- Patch ref: `4ee8d0bfb` (reviewed) → `40b1bb407` (pre-2026-08-09 active) → `cfd77f31bd` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed patch inspected; this catalogue pass changes only `peter/patch-catalog/` documentation.
 - Motivation: Hermes parsed `bank_mission` and `bank_retain_mission` from profile configuration but never transmitted them to Hindsight, leaving the live bank's `reflect_mission` and `retain_mission` null.

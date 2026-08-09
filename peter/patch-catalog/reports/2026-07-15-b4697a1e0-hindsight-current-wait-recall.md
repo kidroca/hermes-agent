@@ -2,7 +2,7 @@
 
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
-- Patch ref: `b4697a1e0` (reviewed) → `a6f99a6b8` (active)
+- Patch ref: `b4697a1e0` (reviewed) → `a6f99a6b8` (pre-2026-08-09 active) → `1369da7563` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed patch inspected. Its original public settings were renamed by successor `2145e9a9b`; this report preserves the original names only as historical context.
 - Motivation: offer a deliberate current-message recall path that waits before prompt construction, while retaining the established asynchronous prior-turn warming lifecycle as the default. Avoid stale prior-turn cache use in the current-turn mode, preserve short/empty gates, and make malformed wait configuration safe.

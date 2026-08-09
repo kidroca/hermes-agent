@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-27
 - **Repo:** `NousResearch/hermes-agent` (Peter's local patch stack)
-- **Patch ref:** `6c4509399` → `0ee8c977f` → `035e797b0` → `b6d6f2e75` → `c4f46a0d9` (active on `peter/hermes-patches`)
+- **Patch ref:** `6c4509399` → `0ee8c977f` → `035e797b0` → `b6d6f2e75` → `c4f46a0d9` (pre-2026-08-09 active) → `d301755ee7` (active)
 - **Branch:** `peter/hermes-patches`
 - **Local status:** retained in Peter's local patch stack
 - **Motivation:** `hermes gateway status --system` falsely reported a current unit as outdated on WSL because generated systemd units capture an ambient shell PATH whose Android/Windows interop entries differ across login, sudo, and service-generation contexts.

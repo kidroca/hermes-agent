@@ -2,7 +2,7 @@
 
 - Date: 2026-07-18
 - Repo: `/opt/hermes-agent`
-- Patch ref: `e0284f334` (reviewed) → `f53b34553` (active)
+- Patch ref: `e0284f334` (reviewed) → `f53b34553` (pre-2026-08-09 active) → `3cf6f6d9c1` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed patch; this catalogue pass modifies only `peter/patch-catalog/` (an unrelated pre-existing `package-lock.json` worktree modification remains untouched).
 - Motivation:

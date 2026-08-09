@@ -2,7 +2,7 @@
 
 - Date: 2026-07-30
 - Repo: `NousResearch/hermes-agent`
-- Patch ref: `034d505a4` (reviewed) → `630f674e1` (active)
+- Patch ref: `034d505a4` (reviewed) → `630f674e1` (pre-2026-08-09 active) → `02e84d55ad` (active)
 - Branch: `peter/hermes-patches` (authored on `peter/memory-prefetch-deadline`)
 - Local status: functional source commit passed independent review; catalogue documentation is a separate follow-up commit.
 - Motivation:
