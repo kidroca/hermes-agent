@@ -2,7 +2,7 @@
 
 - Date: 2026-08-04
 - Repo: `NousResearch/hermes-agent`
-- Patch ref: `7ab0293e4` (`7ab0293e4498fce7218e4e0935a80e4fd3b47a6e`); integrated as `dd42bea32f` (pre-2026-08-09 active) → `d6271418fd` (pre-2026-08-14 active) → `d352c1028b` (active)
+- Patch ref: `7ab0293e4` (`7ab0293e4498fce7218e4e0935a80e4fd3b47a6e`); integrated as `dd42bea32f` (pre-2026-08-09 active) → `d6271418fd` (pre-2026-08-14 active) → `d352c1028b` (pre-refresh active) → `cfcff7efb8` (active)
 - Branch: `peter/hermes-patches` (authored on `peter/hindsight-git-project`)
 - Local status: retained as `d6271418fd` in the 2026-08-09 rebased candidate; catalogue lineage reconciled.
 - Motivation:
