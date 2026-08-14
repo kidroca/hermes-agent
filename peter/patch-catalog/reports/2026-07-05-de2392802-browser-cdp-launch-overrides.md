@@ -2,7 +2,7 @@
 
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
-- Patch ref: `de2392802`, `a45790619`, `6a726be99` (reviewed) → `e4eed0b1a` + `41be3faa9` + `ed0c4edc8` (pre-2026-08-09 active) → `0c77b22982` + `42e16962a0` + `6fbd0ccd7a` (active)
+- Patch ref: `de2392802`, `a45790619`, `6a726be99` (reviewed) → `e4eed0b1a` + `41be3faa9` + `ed0c4edc8` (pre-2026-08-09 active) → `0c77b22982` + `42e16962a0` + `6fbd0ccd7a` (pre-2026-08-14 active) → `b7edc3f88e` + `61dc02f515` + `99d093ca4a` (active)
 - Branch: peter/hermes-patches
 - Local status: clean at dispatch; catalogue docs generated without modifying Hermes source code
 - Motivation: keep Peter's local Hermes fork behavior stable while upstream evolves.

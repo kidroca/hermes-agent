@@ -2,9 +2,9 @@
 
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
-- Patch ref: `2145e9a9b` (reviewed) → `1ec1958a5` (pre-2026-08-09 active) → `2f4203b7b8` (active)
+- Patch ref: `2145e9a9b` (reviewed) → `1ec1958a5` (pre-2026-08-09 active) → `2f4203b7b8` (pre-2026-08-14 active; dropped 2026-08-14)
 - Branch: `peter/hermes-patches`
-- Local status: committed patch inspected; this catalogue pass changes only `peter/patch-catalog/` documentation.
+- Local status: historical. Dropped during the 2026-08-14 rebase because upstream `34c727c5c2` replaced the provider-local query-timing mode with `recall_sync`; no active local implementation of these setting names remains.
 - Motivation: replace ambiguous public Hindsight timing names with names that state both the queried turn and synchronization behavior, while retaining existing profile compatibility and the established first/resumed/empty-cache recall bootstrap.
 - Changed files: `plugins/memory/hindsight/__init__.py`; `tests/plugins/memory/test_hindsight_provider.py`.
 - Tests / verification: `/opt/hermes-agent/venv/bin/python -m pytest tests/plugins/memory -q -o 'addopts='` — **489 passed** (rerun during this catalogue pass). `git show --check 2145e9a9b` returned clean.
@@ -38,7 +38,7 @@ This is a nomenclature and wait-scope clarification of local patch `b4697a1e0`; 
 
 ## Recommendation
 
-Keep `2145e9a9b` only for its `recall_query_turn` (`previous_async|current_sync`) nomenclature and query-turn/bootstrap semantics. Patch `034d505a4` supersedes its provider-local wait contract and old wait-key aliases with `memory.external_prefetch_timeout_seconds`. On rebase, compare first with #62687, #64745, #62870, and #43998, but do not resurrect the duplicate Hindsight wait policy. Re-run the complete Hindsight memory suite after any merge touching `prefetch()`, `queue_prefetch()`, worker-result publication, or recall timing settings.
+Historical only. Upstream commit `34c727c5c2` now owns current-turn recall through `recall_sync`, so the local `recall_query_turn` nomenclature and compatibility aliases were removed rather than transplanted. Continue using `memory.external_prefetch_timeout_seconds` for the retained generic latency bound; do not restore provider-local timing policy.
 
 ## Raw authenticated search queries used
 

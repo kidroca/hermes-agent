@@ -2,7 +2,7 @@
 
 - Date: 2026-07-25
 - Repo: `/opt/hermes-agent`
-- Patch ref: `d7d72f7b7` (reviewed) → `acce69a54` (pre-2026-08-09 active) → `524509a777` (active)
+- Patch ref: `d7d72f7b7` (reviewed) → `acce69a54` (pre-2026-08-09 active) → `524509a777` (pre-2026-08-14 active) → `97a22e5917` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed independently from ACP close lifecycle support so it can be dropped when upstream adopts equivalent lazy persistence.
 - Motivation: `session/new` previously created durable empty rows that survived abandoned editor drafts and accumulated in `state.db`.

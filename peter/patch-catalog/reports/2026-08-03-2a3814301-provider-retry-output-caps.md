@@ -2,7 +2,7 @@
 
 - Date: 2026-08-03
 - Repo: `NousResearch/hermes-agent`
-- Patch ref: `2a381430193d652989e064fc91e856b45ec5f217` → `555d077a4` (pre-2026-08-09 active) → `e506a696e3` (active)
+- Patch ref: `2a381430193d652989e064fc91e856b45ec5f217` → `555d077a4` (pre-2026-08-09 active) → `e506a696e3` (pre-2026-08-14 active) → `e923efb3f6` (active)
 - Branch: `peter/hermes-patches`
 - Local status: cherry-picked onto the reconciled patch branch; catalogue entry is a separate follow-up commit.
 - Motivation: the chat-completions transport resolves the one-shot `ephemeral_max_output_tokens` cap before calling provider profile hooks, but profile hooks can add top-level kwargs afterward. A profile that computes `max_tokens` therefore had no way to preserve a smaller retry/overflow cap instead of overwriting it with its normal value.

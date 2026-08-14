@@ -2,7 +2,7 @@
 
 - Date: 2026-07-30
 - Repo: `NousResearch/hermes-agent`
-- Patch ref: `0bdcb31e5` (reviewed) → `ac4996f6e` (pre-2026-08-09 active) → `3e8ff12c34` (active)
+- Patch ref: `0bdcb31e5` (reviewed) → `ac4996f6e` (pre-2026-08-09 active) → `3e8ff12c34` (pre-2026-08-14 active) → `e96e6fd77f` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed as a narrow standalone patch after explicit scope review.
 - Motivation: HTTP CDP discovery caches Chromium's process-specific WebSocket UUID. Browser cleanup removed the session but left that cached UUID behind, so the next session could reconnect to a dead browser generation.

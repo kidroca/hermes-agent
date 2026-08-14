@@ -2,7 +2,7 @@
 
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
-- Patch ref: `78568898e` (reviewed) → `7b85e970e` (pre-2026-08-09 active) → `f120632b37` (active)
+- Patch ref: `78568898e` (reviewed) → `7b85e970e` (pre-2026-08-09 active) → `f120632b37` (pre-2026-08-14 active) → `dc959bb70f` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed patch inspected; this catalogue pass changes only `peter/patch-catalog/` documentation.
 - Motivation: Hindsight intentionally queues recall from turn *N* for injection on turn *N+1*. The preceding short-input gate incorrectly evaluated the *N+1* acknowledgement (for example, `ok`) and discarded/cancelled turn *N*'s already completed or slow recall.

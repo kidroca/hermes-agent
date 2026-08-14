@@ -2,9 +2,9 @@
 
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
-- Patch ref: `b4697a1e0` (reviewed) → `a6f99a6b8` (pre-2026-08-09 active) → `1369da7563` (active)
+- Patch ref: `b4697a1e0` (reviewed) → `a6f99a6b8` (pre-2026-08-09 active) → `1369da7563` (pre-2026-08-14 active; dropped 2026-08-14)
 - Branch: `peter/hermes-patches`
-- Local status: committed patch inspected. Its original public settings were renamed by successor `2145e9a9b`; this report preserves the original names only as historical context.
+- Local status: historical. Dropped during the 2026-08-14 rebase because upstream `34c727c5c2` now provides current-turn Hindsight recall through `recall_sync`; no active local implementation of this provider-local strategy remains.
 - Motivation: offer a deliberate current-message recall path that waits before prompt construction, while retaining the established asynchronous prior-turn warming lifecycle as the default. Avoid stale prior-turn cache use in the current-turn mode, preserve short/empty gates, and make malformed wait configuration safe.
 - Changed files: `plugins/memory/hindsight/__init__.py`; `tests/plugins/memory/test_hindsight_provider.py`.
 - Tests / verification: provided post-commit verification: `/opt/hermes-agent/venv/bin/python -m pytest tests/plugins/memory -q -o 'addopts='` — **487 passed**. Final independent review found no blockers.
@@ -36,7 +36,7 @@ The current-wait path honors tools-only, disabled-auto-recall, shutdown, empty-q
 
 ## Recommendation
 
-Keep `b4697a1e0` locally as the historical behavior-introducing patch, with public nomenclature superseded by `2145e9a9b`. Upstream overlap is **very high** in the Hindsight prefetch/current-turn-recall area, but no reviewed upstream change replaces this narrowly scoped strategy. During rebase, first compare against #62687 and #64745; retain the default `previous_async` compatibility contract, `current_sync` warmup suppression, strict current-result-only behavior, query gates, and safe malformed-wait fallback unless upstream demonstrably covers each one. Re-run the complete Hindsight memory suite after any merge touching `prefetch()`, `queue_prefetch()`, `_prefetch_result`, or recall query-timing configuration.
+Historical only. Upstream commit `34c727c5c2` replaced the local provider strategy with the current `recall_sync` architecture and regression coverage. Do not resurrect the removed strategy or its stale-cache machinery; preserve only still-needed local contracts in the upstream architecture, such as source labeling, short-input handling, and the generic external-memory deadline.
 
 ## Raw search queries used
 

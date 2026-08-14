@@ -2,7 +2,7 @@
 
 - Date: 2026-07-19
 - Repo: `/Users/Shared/AI/hermes-agent`
-- Patch ref: `578c68e6a` (reviewed; authored externally as `d75472ae0`) → `95b101e1c` (pre-2026-08-09 active) → `59a62b3ba4` (active)
+- Patch ref: `578c68e6a` (reviewed; authored externally as `d75472ae0`) → `95b101e1c` (pre-2026-08-09 active) → `59a62b3ba4` (pre-2026-08-14 active) → `6e39c6976b` (active)
 - Branch: `peter/hermes-patches` (authored on `peter/hindsight-slack-query` before integration)
 - Local status: functional patch committed; this catalogue pass changes only `peter/patch-catalog/`.
 - Motivation:
