@@ -24,7 +24,9 @@ def test_check_for_updates_uses_cache(tmp_path, monkeypatch):
 
     cache_file = tmp_path / ".update_check"
     cache_file.write_text(
-        json.dumps({"ts": time.time(), "behind": 3, "ver": __version__}),
+        json.dumps(
+            {"ts": time.time(), "behind": 3, "ver": __version__, "schema": 2}
+        ),
         encoding="utf-8",
     )
 
@@ -36,8 +38,22 @@ def test_check_for_updates_uses_cache(tmp_path, monkeypatch):
     mock_run.assert_not_called()
 
 
+def test_check_for_updates_invalidates_legacy_origin_cache(tmp_path, monkeypatch):
+    """A pre-fork-aware zero result must not hide canonical upstream lag."""
+    import hermes_cli.banner as banner
+    from hermes_cli import __version__
 
+    cache_file = tmp_path / ".update_check"
+    cache_file.write_text(
+        json.dumps({"ts": time.time(), "behind": 0, "ver": __version__})
+    )
 
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    with patch.object(banner, "_check_via_local_git", return_value=778) as check:
+        result = banner.check_for_updates()
+
+    assert result == 778
+    check.assert_called_once()
 
 
 def test_prefetch_non_blocking():

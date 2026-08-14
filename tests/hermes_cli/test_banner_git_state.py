@@ -17,13 +17,18 @@ def test_format_banner_version_label_on_upstream_main():
     assert "local" not in value
 
 
-def test_get_git_banner_state_reads_origin_and_head(tmp_path):
+def test_get_git_banner_state_reads_official_origin_and_head(tmp_path):
     from hermes_cli import banner
 
     repo_dir = tmp_path / "repo"
     (repo_dir / ".git").mkdir(parents=True)
 
     results = {
+        ("git", "remote"): MagicMock(returncode=0, stdout="origin\n"),
+        ("git", "remote", "get-url", "origin"): MagicMock(
+            returncode=0,
+            stdout="https://github.com/NousResearch/hermes-agent.git\n",
+        ),
         ("git", "rev-parse", "--short=8", "origin/main"): MagicMock(returncode=0, stdout="b2f477a3\n"),
         ("git", "rev-parse", "--short=8", "HEAD"): MagicMock(returncode=0, stdout="af8aad31\n"),
         ("git", "rev-list", "--count", "origin/main..HEAD"): MagicMock(returncode=0, stdout="3\n"),
@@ -42,47 +47,15 @@ def test_get_git_banner_state_reads_origin_and_head(tmp_path):
 
 
 def test_check_via_local_git_ssh_fastpath_ahead_not_behind(tmp_path):
-    """SSH fast path must not report an ahead (carried) HEAD as behind.
-
-    A carried local commit means tip SHAs differ, but the fresh upstream tip
-    is an ancestor of HEAD — that is "ahead", and reporting it as behind
-    nudges the user into `hermes update`, which can wipe the carried work.
-    """
-    from unittest.mock import MagicMock
-
+    """SSH fast path must not report an ahead (carried) HEAD as behind."""
     from hermes_cli import banner
 
     repo_dir = tmp_path / "repo"
     (repo_dir / ".git").mkdir(parents=True)
 
     def fake_git_stdout(args, *, cwd, timeout=5):
-        if args == ["remote", "get-url", "origin"]:
-            return "git@github.com:NousResearch/hermes-agent.git"
-        if args == ["rev-parse", "HEAD"]:
-            return "b" * 40  # carried commit, differs from upstream tip
-        raise AssertionError(f"unexpected git call: {args}")
-
-    with (
-        patch.object(banner, "_git_stdout", side_effect=fake_git_stdout),
-        patch.object(banner, "_upstream_main_sha", return_value="a" * 40),
-        # merge-base --is-ancestor exits 0: upstream tip IS an ancestor of HEAD
-        patch.object(banner.subprocess, "run", return_value=MagicMock(returncode=0)),
-    ):
-        behind = banner._check_via_local_git(repo_dir)
-
-    assert behind == 0
-
-
-def test_check_via_local_git_ssh_fastpath_genuinely_behind(tmp_path):
-    """SSH fast path reports the exact count (compare API) when behind."""
-    from unittest.mock import MagicMock
-
-    from hermes_cli import banner
-
-    repo_dir = tmp_path / "repo"
-    (repo_dir / ".git").mkdir(parents=True)
-
-    def fake_git_stdout(args, *, cwd, timeout=5):
+        if args == ["remote"]:
+            return "origin"
         if args == ["remote", "get-url", "origin"]:
             return "git@github.com:NousResearch/hermes-agent.git"
         if args == ["rev-parse", "HEAD"]:
@@ -92,7 +65,32 @@ def test_check_via_local_git_ssh_fastpath_genuinely_behind(tmp_path):
     with (
         patch.object(banner, "_git_stdout", side_effect=fake_git_stdout),
         patch.object(banner, "_upstream_main_sha", return_value="a" * 40),
-        # merge-base --is-ancestor exits 1: not an ancestor -> genuinely behind
+        patch.object(banner.subprocess, "run", return_value=MagicMock(returncode=0)),
+    ):
+        behind = banner._check_via_local_git(repo_dir)
+
+    assert behind == 0
+
+
+def test_check_via_local_git_ssh_fastpath_genuinely_behind(tmp_path):
+    """SSH fast path reports the exact count (compare API) when behind."""
+    from hermes_cli import banner
+
+    repo_dir = tmp_path / "repo"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    def fake_git_stdout(args, *, cwd, timeout=5):
+        if args == ["remote"]:
+            return "origin"
+        if args == ["remote", "get-url", "origin"]:
+            return "git@github.com:NousResearch/hermes-agent.git"
+        if args == ["rev-parse", "HEAD"]:
+            return "b" * 40
+        raise AssertionError(f"unexpected git call: {args}")
+
+    with (
+        patch.object(banner, "_git_stdout", side_effect=fake_git_stdout),
+        patch.object(banner, "_upstream_main_sha", return_value="a" * 40),
         patch.object(banner.subprocess, "run", return_value=MagicMock(returncode=1)),
         patch.object(banner, "_github_compare_behind", return_value=3),
     ):
@@ -103,14 +101,14 @@ def test_check_via_local_git_ssh_fastpath_genuinely_behind(tmp_path):
 
 def test_check_via_local_git_ssh_fastpath_offline_keeps_sentinel(tmp_path):
     """Behind + compare API unreachable = honest no-count sentinel, never 1."""
-    from unittest.mock import MagicMock
-
     from hermes_cli import banner
 
     repo_dir = tmp_path / "repo"
     (repo_dir / ".git").mkdir(parents=True)
 
     def fake_git_stdout(args, *, cwd, timeout=5):
+        if args == ["remote"]:
+            return "origin"
         if args == ["remote", "get-url", "origin"]:
             return "git@github.com:NousResearch/hermes-agent.git"
         if args == ["rev-parse", "HEAD"]:
@@ -126,3 +124,69 @@ def test_check_via_local_git_ssh_fastpath_offline_keeps_sentinel(tmp_path):
         behind = banner._check_via_local_git(repo_dir)
 
     assert behind == banner.UPDATE_AVAILABLE_NO_COUNT
+
+
+def test_get_git_banner_state_prefers_official_remote_over_fork_origin(tmp_path):
+    from hermes_cli import banner
+
+    repo_dir = tmp_path / "repo"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    results = {
+        ("git", "remote"): MagicMock(returncode=0, stdout="origin\nupstream\n"),
+        ("git", "remote", "get-url", "origin"): MagicMock(
+            returncode=0,
+            stdout="https://github.com/kidroca/hermes-agent.git\n",
+        ),
+        ("git", "remote", "get-url", "upstream"): MagicMock(
+            returncode=0,
+            stdout="https://github.com/NousResearch/hermes-agent.git\n",
+        ),
+        ("git", "rev-parse", "--short=8", "upstream/main"): MagicMock(returncode=0, stdout="1f8fdc7b\n"),
+        ("git", "rev-parse", "--short=8", "HEAD"): MagicMock(returncode=0, stdout="baff1e8f\n"),
+        ("git", "rev-list", "--count", "upstream/main..HEAD"): MagicMock(returncode=0, stdout="71\n"),
+    }
+
+    def fake_run(cmd, **kwargs):
+        key = tuple(cmd)
+        if key not in results:
+            raise AssertionError(f"unexpected command: {cmd}")
+        return results[key]
+
+    with patch("hermes_cli.banner.subprocess.run", side_effect=fake_run):
+        state = banner.get_git_banner_state(repo_dir)
+
+    assert state == {"upstream": "1f8fdc7b", "local": "baff1e8f", "ahead": 71}
+
+
+def test_local_update_check_fetches_and_counts_against_official_remote(tmp_path):
+    from hermes_cli import banner
+
+    repo_dir = tmp_path / "repo"
+    (repo_dir / ".git").mkdir(parents=True)
+
+    results = {
+        ("git", "remote"): MagicMock(returncode=0, stdout="origin\nupstream\n"),
+        ("git", "remote", "get-url", "origin"): MagicMock(
+            returncode=0,
+            stdout="https://github.com/kidroca/hermes-agent.git\n",
+        ),
+        ("git", "remote", "get-url", "upstream"): MagicMock(
+            returncode=0,
+            stdout="https://github.com/NousResearch/hermes-agent.git\n",
+        ),
+        ("git", "rev-parse", "--is-shallow-repository"): MagicMock(returncode=0, stdout="false\n"),
+        ("git", "fetch", "upstream", "main", "--quiet"): MagicMock(returncode=0, stdout=""),
+        ("git", "rev-list", "--count", "HEAD..upstream/main"): MagicMock(returncode=0, stdout="778\n"),
+    }
+
+    def fake_run(cmd, **kwargs):
+        key = tuple(cmd)
+        if key not in results:
+            raise AssertionError(f"unexpected command: {cmd}")
+        return results[key]
+
+    with patch("hermes_cli.banner.subprocess.run", side_effect=fake_run):
+        behind = banner._check_via_local_git(repo_dir)
+
+    assert behind == 778
