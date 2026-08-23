@@ -2,7 +2,7 @@
 
 - Date: 2026-07-16
 - Repo: /opt/hermes-agent
-- Patch ref: `c9895f4cf` (reviewed) → `53a7b903a` (pre-2026-08-09 active) → `b9b4f366b0` (pre-2026-08-14 active) → `77ba2d467f` (pre-refresh active) → `3edc972c42` (active)
+- Patch ref: `c9895f4cf` (reviewed) → `53a7b903a` (pre-2026-08-09 active) → `b9b4f366b0` (pre-2026-08-14 active) → `77ba2d467f` (pre-refresh active) → `3edc972c42` (pre-2026-08-23 active) → `0366d7db77` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed at `HEAD`; pre-existing `package-lock.json` modification left untouched; catalogue docs updated without modifying source or tests
 - Motivation: stock Hermes invokes GNU-only `--no-overwrite-dir` on the remote extractor; macOS bsdtar 3.5.3 rejects it and aborts support-file synchronization. The existing local manifest patch already prevents parent-directory headers, so portable extraction can preserve the directory-mode safety contract without the GNU-only flag.
