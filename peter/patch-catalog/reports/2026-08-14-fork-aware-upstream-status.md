@@ -2,7 +2,7 @@
 
 - Date: 2026-08-14
 - Repo: `NousResearch/hermes-agent`
-- Patch ref: `feb00ce956c71adea296375074edc5d0d5364a90` → `b74ce0fb60` → `7dd4f18b73` (active)
+- Patch ref: `feb00ce956c71adea296375074edc5d0d5364a90` → `b74ce0fb60` → `7dd4f18b73` (pre-drop candidate) → `0a47c05930` (active)
 - Branch: `peter/hermes-patches`
 - Local status: integrated into the verified update candidate pending guarded publication to `origin/peter/hermes-patches`.
 - Motivation: fork installations keep Peter's fork as `origin` and canonical NousResearch Hermes as `upstream`. The startup banner and asynchronous update check hardcoded `origin/main`, which reported `0 behind / 9407 local` instead of canonical upstream lag and suppressed the TUI update warning.
