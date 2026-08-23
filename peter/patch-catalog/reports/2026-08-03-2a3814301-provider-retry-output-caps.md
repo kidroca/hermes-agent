@@ -17,7 +17,7 @@ The intended regression was to use a profile override that returned top-level `m
 
 ## Upstream overlap and rebase risk
 
-The 2026-08-23 audit found that current upstream resolves output caps in priority order `ephemeral > user > profile default`. No bundled provider profile reads `ephemeral_max_output_tokens` from `build_api_kwargs_extras()` context, so the local metadata extension has no production consumer. The only asserted behavior remains present after removing the patch.
+The 2026-08-23 audit found that current upstream initially resolves output caps in priority order `ephemeral > user > profile default`, but profile top-level extras are merged afterward and can still overwrite that value. No bundled provider profile reads `ephemeral_max_output_tokens` from `build_api_kwargs_extras()` context, so the local metadata extension has no production consumer. The patch was therefore retired as unused/speculative metadata, not as upstream-equivalent ordering. The only asserted behavior remains present after removing it because the regression did not place a competing value in the top-level tuple.
 
 Mechanical conflict risk is low today, concentrated in the transport's profile-hook call and its base contract documentation. Recheck this invariant if upstream changes request-kwargs ordering: a provider-specific top-level cap must not erase a smaller retry cap merely because profile extras are merged later.
 

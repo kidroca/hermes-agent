@@ -6,9 +6,10 @@
 - Preserved pre-rebase fork tip: `d48fdf07a852925b28b1f4ac247a697aad45a998`
 - Recovery ref: `recovery/hermes-update-remote-pre-rebase-20260823T102428Z`
 - Previous upstream base: `a90d5369f76c87c98547d2e283aa26d5cfabf322`
-- Final upstream base: `933c209e96630a6026b0a18ecf6a86e65110f5b8`
+- Initial fetched upstream base: `933c209e96630a6026b0a18ecf6a86e65110f5b8`
+- Final refreshed upstream base: `b766607b5b92879c21ffd767465487e6de725868`
 - Candidate branch: `update/hermes-patches-20260823T102428Z`
-- Source candidate before this report: `1e8467df2667efc1aecdc036f20f81fec40d8097`
+- Source candidate before this report: `6687e867f7` (the final-base rewrite of `1e8467df26`)
 
 The rebase ran in an isolated worktree. The live checkout at `/opt/hermes-agent`, its venv, and the checked-out fork branch remained untouched.
 
@@ -21,9 +22,11 @@ The final source-stack range-diff against the previous 73-commit stack classifie
 - 1 source patch as dropped (`<`).
 - 1 new documentation commit (`>`) for the 2026-08-23 lineage reconciliation.
 
+After verification, upstream advanced by 20 commits. The complete 74-commit candidate rebased over that final delta patch-identically (`74 =`, no conflicts), then the active catalogue lineage was refreshed once more.
+
 Dropped patch:
 
-- `c9519c86e3` / rebased trial `0339000898` — provider retry output-cap metadata. Current upstream already resolves output caps in priority order `ephemeral > user > profile default`; no bundled provider profile consumes the forwarded metadata. The local regression returned its competing value in the `extra_body` half of the hook tuple, so it did not prove the claimed top-level override edge case. The final upstream behavior passes its 51-test transport suite without the patch.
+- `c9519c86e3` / rebased trial `0339000898` — provider retry output-cap metadata. Current upstream initially resolves output caps in priority order `ephemeral > user > profile default`, but later profile top-level extras can still overwrite that value. No bundled provider profile consumes the forwarded metadata, and the local regression returned its competing value in the `extra_body` half of the hook tuple, so it did not prove the claimed top-level override edge case. The patch was retired as unused/speculative metadata—not as upstream-equivalent ordering—and the final transport suite passes without it.
 
 Materially adapted patch families:
 
@@ -50,7 +53,7 @@ Materially adapted patch families:
 - Canonical changed-area Python suite after the drop: 39 files, 1,427 passed, 4 skipped, 0 failed.
 - Dropped-patch transport regression set: 51 passed, 0 failed.
 - TUI `check`: Ink build and TypeScript passed; 160 files / 1,715 tests passed with 1 skipped; lint had 0 errors and 2 upstream warnings.
-- Desktop typecheck and lint passed; lint had 0 errors and 117 upstream warnings. Desktop Vitest passed 682 files with 1 skipped and 7,066 tests with 3 skipped.
+- Desktop typecheck and lint passed; lint had 0 errors and 117 upstream warnings. Desktop Vitest passed 686 files with 1 skipped and 7,100 tests with 3 skipped.
 - Ruff passed across the candidate-changed Python set; one pre-existing malformed-`noqa` warning remains in `run_agent.py`.
 - `git diff --check`: passed.
 - The candidate-only venv required the lock-defined `agent-client-protocol==0.9.0` and `hindsight-client==0.6.1` extras before the canonical Python run; after installation, the full changed-area suite passed.
