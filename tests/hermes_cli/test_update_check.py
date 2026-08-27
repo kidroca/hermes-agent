@@ -188,6 +188,47 @@ def test_check_via_local_git_fetch_failure_keeps_positive_stale_count(tmp_path, 
     assert result == 5, "Stale positive behind-count must be preserved on fetch failure"
 
 
+def test_check_via_local_git_fetch_failure_uses_canonical_remote_ref(
+    tmp_path, monkeypatch
+):
+    """A fork checkout's stale fallback must count canonical upstream, not origin."""
+    from hermes_cli import banner
+
+    repo_dir = tmp_path / "hermes-agent"
+    repo_dir.mkdir()
+    (repo_dir / ".git").mkdir()
+
+    def mock_git_stdout(args, *, cwd, timeout=5):
+        if args == ["remote"]:
+            return "origin\nupstream"
+        if args == ["remote", "get-url", "origin"]:
+            return "https://github.com/example/hermes-agent.git"
+        if args == ["remote", "get-url", "upstream"]:
+            return "https://github.com/NousResearch/hermes-agent.git"
+        if args == ["rev-parse", "--is-shallow-repository"]:
+            return "false"
+        return None
+
+    failed_proc = MagicMock(returncode=1, stdout="", stderr="offline")
+    stale_behind_proc = MagicMock(returncode=0, stdout="5")
+
+    def mock_run(args, **kwargs):
+        if args[:2] == ["git", "fetch"]:
+            assert args == ["git", "fetch", "upstream", "main", "--quiet"]
+            return failed_proc
+        if args[:2] == ["git", "rev-list"]:
+            assert args == [
+                "git", "rev-list", "--count", "HEAD..upstream/main"
+            ]
+            return stale_behind_proc
+        raise AssertionError(f"unexpected subprocess.run: {args}")
+
+    monkeypatch.setattr(banner, "_git_stdout", mock_git_stdout)
+    monkeypatch.setattr(banner.subprocess, "run", mock_run)
+
+    assert banner._check_via_local_git(repo_dir) == 5
+
+
 def test_check_via_local_git_fetch_failure_rev_list_error_returns_none(tmp_path, monkeypatch):
     """If the stale rev-list itself fails, the check stays inconclusive (None)."""
     from hermes_cli import banner
