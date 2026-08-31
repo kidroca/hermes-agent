@@ -2,7 +2,7 @@
 
 - Date: 2026-07-31
 - Repo: `NousResearch/hermes-agent`
-- Patch ref: `52b50c157fee72ced745378e5de0a762f6d6cafb` → `652b895c7` (pre-2026-08-09 active) → `e8071ce7e3` (pre-2026-08-14 active) → `1a060e43b3` (pre-refresh active) → `4d3a379f51` (pre-2026-08-23 active) → `04866d35ac` (pre-final-refresh active) → `6e61136e86` (pre-2026-08-27 active) → `9630fd0c30` (pre-final-refresh active) → `5f14096b69` (pre-final-refresh-2 active) → `c9bef5f5b4` (active)
+- Patch ref: `52b50c157fee72ced745378e5de0a762f6d6cafb` → `652b895c7` (pre-2026-08-09 active) → `e8071ce7e3` (pre-2026-08-14 active) → `1a060e43b3` (pre-refresh active) → `4d3a379f51` (pre-2026-08-23 active) → `04866d35ac` (pre-final-refresh active) → `6e61136e86` (pre-2026-08-27 active) → `9630fd0c30` (pre-final-refresh active) → `5f14096b69` (pre-final-refresh-2 active) → `c9bef5f5b4` (pre-2026-08-31 active) → `0080fdea6c` (active)
 - Branch: `peter/hermes-patches` (originally authored on `peter/curator-parallel-skill-view`)
 - Local status: committed local patch and committed catalogue entry
 - Motivation: `hermes curator run --consolidate` could execute background-review `skill_view` calls in copied parallel worker contexts. The read-before-write marks written to a `ContextVar` did not flow back to the parent context, so later `skill_manage` patches were falsely rejected and repeated failures could trigger `same_tool_failure_halt`.

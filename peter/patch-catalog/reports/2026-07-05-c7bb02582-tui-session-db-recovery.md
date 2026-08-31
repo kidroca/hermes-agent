@@ -2,7 +2,7 @@
 
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
-- Patch ref: `c7bb02582`, `bd2740267` (reviewed) → `4e5278808` + `ec22e73cb` (pre-2026-08-09 active) → `5e739d034e` + `0e7f68a806` (pre-2026-08-14 active) → `21e6282757` + `ba0691c254` (pre-refresh active) → `838f1de450` + `c9cd4f9d6c` (pre-2026-08-23 active) → `d5c283e08e` + `65a5866a82` (pre-final-refresh active) → `20888a2dca` + `c27bea8e6c` (pre-2026-08-27 active) → `e542839ada` + `85da84a62b` (pre-final-refresh active) → `2226c0e421` + `9a20db470a` (pre-final-refresh-2 active) → `bb126c27bf` + `43f436a45a` (active)
+- Patch ref: `c7bb02582`, `bd2740267` (reviewed) → `4e5278808` + `ec22e73cb` (pre-2026-08-09 active) → `5e739d034e` + `0e7f68a806` (pre-2026-08-14 active) → `21e6282757` + `ba0691c254` (pre-refresh active) → `838f1de450` + `c9cd4f9d6c` (pre-2026-08-23 active) → `d5c283e08e` + `65a5866a82` (pre-final-refresh active) → `20888a2dca` + `c27bea8e6c` (pre-2026-08-27 active) → `e542839ada` + `85da84a62b` (pre-final-refresh active) → `2226c0e421` + `9a20db470a` (pre-final-refresh-2 active) → `bb126c27bf` + `43f436a45a` (pre-2026-08-31 active) → `b616ed07b5` + `946169ce3f` (active)
 - Branch: peter/hermes-patches
 - Local status: clean at dispatch; catalogue docs generated without modifying Hermes source code
 - Motivation: keep Peter's local Hermes fork behavior stable while upstream evolves.

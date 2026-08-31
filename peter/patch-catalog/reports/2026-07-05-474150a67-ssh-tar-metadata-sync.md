@@ -2,7 +2,7 @@
 
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
-- Patch ref: `474150a67` (reviewed) → `ed44e31a3` (pre-2026-08-09 active) → `a547eaa832` (pre-2026-08-14 active) → `3ae8460bb3` (pre-refresh active) → `ed77ecde2a` (pre-2026-08-23 active) → `9f42ba4db3` (pre-final-refresh active) → `481b3f9502` (pre-2026-08-27 active) → `9c038aeb26` (pre-final-refresh active) → `d968b54e8c` (pre-final-refresh-2 active) → `f355d4aa81` (active)
+- Patch ref: `474150a67` (reviewed) → `ed44e31a3` (pre-2026-08-09 active) → `a547eaa832` (pre-2026-08-14 active) → `3ae8460bb3` (pre-refresh active) → `ed77ecde2a` (pre-2026-08-23 active) → `9f42ba4db3` (pre-final-refresh active) → `481b3f9502` (pre-2026-08-27 active) → `9c038aeb26` (pre-final-refresh active) → `d968b54e8c` (pre-final-refresh-2 active) → `f355d4aa81` (pre-2026-08-31 active) → `0026b24c3b` (active)
 - Branch: peter/hermes-patches
 - Local status: clean at dispatch; catalogue docs generated without modifying Hermes source code
 - Motivation: keep Peter's local Hermes fork behavior stable while upstream evolves.
