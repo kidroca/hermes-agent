@@ -144,7 +144,7 @@ class TestCliApprovalUi:
                 time.sleep(0.01)
 
             assert cli._approval_state is not None
-            assert write.call_args_list[0].args[0] == "\a"
+            assert [call.args[0] for call in write.call_args_list].count("\a") == 1
 
             cli._approval_state["response_queue"].put("deny")
             thread.join(timeout=2)

@@ -16491,13 +16491,6 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         _cprint(f"\n{_DIM}(clarify timed out after {timeout}s — locked answers returned){_RST}")
         return {"answers": partial, "timed_out": True}
 
-    def _ring_prompt_bell(self) -> None:
-        """Ring the terminal bell when a blocking human prompt appears."""
-        if not getattr(self, "bell_on_prompt", False):
-            return
-        sys.stdout.write("\a")
-        sys.stdout.flush()
-
     def _sudo_password_callback(self) -> str:
         """
         Prompt for sudo password through the prompt_toolkit UI.
@@ -16585,8 +16578,6 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 "response_queue": response_queue,
             }
             self._approval_deadline = _time.monotonic() + timeout
-            self._ring_prompt_bell()
-
             self._ring_bell(prompt=True, context="approval", detail=command)
             # Modal prompt — paint immediately, bypassing the throttle/resize
             # guard. A throttled paint here can be silently dropped (250ms
