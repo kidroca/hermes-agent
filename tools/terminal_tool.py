@@ -2169,6 +2169,7 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
             key_path=ssh_config.get("key", ""),
             cwd=cwd,
             timeout=timeout,
+            sync_files=ssh_config.get("sync_files", True),
         )
 
     else:

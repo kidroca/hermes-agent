@@ -1300,6 +1300,10 @@ def _probe_remote_backend(env_type: str) -> str | None:
                 "port": config.get("ssh_port", 22),
                 "key": config.get("ssh_key", ""),
                 "persistent": config.get("ssh_persistent", False),
+                # This environment is used only for uname/whoami/pwd. Syncing
+                # skills, credentials, and caches here can block prompt/model
+                # setup without changing the probe result.
+                "sync_files": False,
             }
 
         container_config = None
