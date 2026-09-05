@@ -2,7 +2,7 @@
 
 - Date: 2026-07-25
 - Repo: `/opt/hermes-agent`
-- Patch ref: `d7d72f7b7` (reviewed) → `acce69a54` (pre-2026-08-09 active) → `524509a777` (pre-2026-08-14 active) → `97a22e5917` (pre-refresh active) → `7668e67efc` (pre-2026-08-23 active) → `9ece37ed16` (pre-final-refresh active) → `3cb83f7bd4` (pre-2026-08-27 active) → `1107a74b70` (pre-final-refresh active) → `2a5abdd187` (pre-final-refresh-2 active) → `9deb321ab9` (pre-2026-08-31 active) → `8a7749fb5f` (active)
+- Patch ref: `d7d72f7b7` (reviewed) → `acce69a54` (pre-2026-08-09 active) → `524509a777` (pre-2026-08-14 active) → `97a22e5917` (pre-refresh active) → `7668e67efc` (pre-2026-08-23 active) → `9ece37ed16` (pre-final-refresh active) → `3cb83f7bd4` (pre-2026-08-27 active) → `1107a74b70` (pre-final-refresh active) → `2a5abdd187` (pre-final-refresh-2 active) → `9deb321ab9` (pre-2026-08-31 active) → `8a7749fb5f` (pre-2026-09-05 active) → `ba147e55e2` (active)
 - Branch: `peter/hermes-patches`
 - Local status: committed independently from ACP close lifecycle support so it can be dropped when upstream adopts equivalent lazy persistence.
 - Motivation: `session/new` previously created durable empty rows that survived abandoned editor drafts and accumulated in `state.db`.

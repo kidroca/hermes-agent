@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-18
 - **Repo:** `NousResearch/hermes-agent` (`/opt/hermes-agent`)
-- **Patch ref:** `6480450d1` → `51e2dcdbe` (reviewed lineage) → `1c8dd46c4` (pre-2026-08-09 active) → `4506407813` (pre-2026-08-14 active) → `c32a7f34ad` (pre-refresh active) → `97676b5ce6` (pre-2026-08-23 active) → `b52daf74ee` (pre-final-refresh active) → `02da8a6540` (pre-2026-08-27 active) → `8bf529c9bb` (pre-final-refresh active) → `fdf9a9a5ef` (pre-final-refresh-2 active) → `c07127db4e` (pre-2026-08-31 active) → `8b672eebe0` (active)
+- **Patch ref:** `6480450d1` → `51e2dcdbe` (reviewed lineage) → `1c8dd46c4` (pre-2026-08-09 active) → `4506407813` (pre-2026-08-14 active) → `c32a7f34ad` (pre-refresh active) → `97676b5ce6` (pre-2026-08-23 active) → `b52daf74ee` (pre-final-refresh active) → `02da8a6540` (pre-2026-08-27 active) → `8bf529c9bb` (pre-final-refresh active) → `fdf9a9a5ef` (pre-final-refresh-2 active) → `c07127db4e` (pre-2026-08-31 active) → `8b672eebe0` (pre-2026-09-05 active) → `c1af3ac41e` (active)
 - **Branch:** `peter/hermes-patches`
 - **Local status:** retained in `peter/hermes-patches`; rebased patch is `51e2dcdbe`
 - **Motivation:** The Ink TUI independently hard-coded an 80-character gateway label budget and a 64-character frontend budget, bypassing `display.tool_preview_length`. Values above 120 should be allowed to wrap naturally, while documented `0 = unlimited` behavior must remain intact. This patch deliberately excludes per-row expansion.

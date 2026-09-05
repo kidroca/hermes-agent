@@ -2,7 +2,7 @@
 
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
-- Patch ref: `199641e5f` (reviewed) → `bf46af1f5` (pre-2026-08-09 active) → `9a2d0a41ca` (pre-2026-08-14 active) → `300f2bb0f2` (pre-refresh active) → `62c1295ccc` (pre-2026-08-23 active) → `5d7c9902be` (pre-final-refresh active) → `a97af5616a` (pre-2026-08-27 active) → `87149f2c8a` (pre-final-refresh active) → `b24faf6793` (pre-final-refresh-2 active) → `3711154f87` (pre-2026-08-31 active) → `7e88edde68` (active)
+- Patch ref: `199641e5f` (reviewed) → `bf46af1f5` (pre-2026-08-09 active) → `9a2d0a41ca` (pre-2026-08-14 active) → `300f2bb0f2` (pre-refresh active) → `62c1295ccc` (pre-2026-08-23 active) → `5d7c9902be` (pre-final-refresh active) → `a97af5616a` (pre-2026-08-27 active) → `87149f2c8a` (pre-final-refresh active) → `b24faf6793` (pre-final-refresh-2 active) → `3711154f87` (pre-2026-08-31 active) → `7e88edde68` (historical; dropped 2026-09-05)
 - Branch: peter/hermes-patches
 - Local status: clean at dispatch; catalogue docs generated without modifying Hermes source code
 - Motivation: keep Peter's local Hermes fork behavior stable while upstream evolves.
@@ -29,7 +29,7 @@ Maintainer signal below means visible PR reviews/comments from the GitHub API; a
 
 ## Recommendation
 
-Watch #58957 closely; if it merges, replace this narrow approval-bell patch with the unified upstream alert mechanism.
+Drop the local patch. Upstream `552159d222` supersedes it with configurable `display.bell_on_prompt` coverage for clarify, approval, sudo, and secret prompts; `632078bca7` adds OSC 9/Warp terminal notifications.
 
 ## Raw search queries used
 
