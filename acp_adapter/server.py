@@ -16,10 +16,12 @@ from typing import Any, Callable, Deque, Optional
 
 import acp
 from acp.schema import (
-    AgentCapabilities, AgentMessageChunk, AuthenticateResponse, ClientCapabilities, ForkSessionResponse,
+    AgentCapabilities, AgentMessageChunk, AuthenticateResponse, ClientCapabilities, CloseSessionResponse,
+    ForkSessionResponse,
     Implementation, InitializeResponse, ListSessionsResponse, LoadSessionResponse, McpServerHttp, McpServerSse,
     McpServerStdio, ModelInfo, NewSessionResponse, PromptCapabilities, PromptResponse, ResumeSessionResponse,
-    SessionCapabilities, SessionForkCapabilities, SessionInfo, SessionInfoUpdate, SessionListCapabilities,
+    SessionCapabilities, SessionCloseCapabilities, SessionForkCapabilities, SessionInfo, SessionInfoUpdate,
+    SessionListCapabilities,
     SessionMode, SessionModeState, SessionModelState, SessionResumeCapabilities, SetSessionConfigOptionResponse,
     SetSessionModeResponse, SetSessionModelResponse, TextContentBlock, Usage, UsageUpdate, UserMessageChunk,
 )
@@ -255,6 +257,8 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
         super().__init__()
         self.session_manager = session_manager or SessionManager()
         self._conn: Optional[acp.Client] = None
+        self._active_prompt_tasks: dict[str, set[asyncio.Task[Any]]] = defaultdict(set)
+        self._close_tasks: dict[str, asyncio.Task[None]] = {}
 
     # ---- Connection lifecycle -----------------------------------------------
 
@@ -505,7 +509,7 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
                 # ``prompt()`` flips ``is_running`` under ``runtime_lock`` before dispatching, so
                 # holding it here closes the window where a refresh would swap ``tools=`` mid-turn.
                 with current.runtime_lock:
-                    if current.is_running:
+                    if current.closing or current.is_running:
                         return
                     if any(int(getattr(agent, k, 0) or 0) > 0 for k in ("_user_turn_count", "_api_call_count")):
                         return
@@ -544,6 +548,7 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
                 load_session=True,
                 prompt_capabilities=PromptCapabilities(image=True),
                 session_capabilities=SessionCapabilities(
+                    close=SessionCloseCapabilities(),
                     fork=SessionForkCapabilities(), list=SessionListCapabilities(), resume=SessionResumeCapabilities(),
                 ),
             ),
@@ -623,7 +628,7 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
     async def load_session(
         self, cwd: str, session_id: str, mcp_servers: list | None = None, **kwargs: Any
     ) -> LoadSessionResponse | None:
-        state = await asyncio.to_thread(self.session_manager.update_cwd, session_id, cwd)
+        state = await asyncio.to_thread(self.session_manager.update_cwd, session_id, cwd, reopen=True)
         if state is None:
             logger.warning("load_session: session %s not found", session_id)
             return None
@@ -633,12 +638,65 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
     async def resume_session(
         self, cwd: str, session_id: str, mcp_servers: list | None = None, **kwargs: Any
     ) -> ResumeSessionResponse:
-        state = await asyncio.to_thread(self.session_manager.update_cwd, session_id, cwd)
+        state = await asyncio.to_thread(self.session_manager.update_cwd, session_id, cwd, reopen=True)
         if state is None:
             logger.warning("resume_session: session %s not found, creating new", session_id)
             state = await asyncio.to_thread(self.session_manager.create_session, cwd=cwd)
         await self._attach_session_mcp(state, mcp_servers, "Resumed session %s", state.session_id)
         return ResumeSessionResponse(**await self._session_response_fields(state, "resume"))
+
+    async def _close_active_session(self, state: SessionState) -> None:
+        """Cancel active work, then release one session off the event loop."""
+        with state.runtime_lock:
+            if state.is_running and state.current_prompt_text:
+                state.interrupted_prompt_text = state.current_prompt_text
+            if state.cancel_event:
+                state.cancel_event.set()
+            try:
+                request_hard_interrupt(state.agent)
+            except Exception:
+                logger.debug(
+                    "Failed to interrupt closing ACP session %s",
+                    state.session_id,
+                    exc_info=True,
+                )
+
+        # prompt() registers its owned task before its first await. Drain every
+        # task before closing HTTP/SQLite resources used by its worker thread.
+        active = tuple(self._active_prompt_tasks.get(state.session_id, ()))
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+
+        await asyncio.to_thread(self.session_manager.finish_close, state)
+        logger.info("Closed ACP session %s", state.session_id)
+
+    async def close_session(
+        self, session_id: str, **kwargs: Any
+    ) -> CloseSessionResponse | None:
+        """Release active resources while preserving durable conversation history."""
+        existing_task = self._close_tasks.get(session_id)
+        if existing_task is None:
+            if self.session_manager.is_closed(session_id):
+                return CloseSessionResponse()
+            state = self.session_manager.begin_close(session_id)
+            if state is None:
+                logger.warning("close_session: active session %s not found", session_id)
+                return None
+            existing_task = asyncio.create_task(self._close_active_session(state))
+            self._close_tasks[session_id] = existing_task
+
+            def _forget_close_task(done: asyncio.Task[None]) -> None:
+                if self._close_tasks.get(session_id) is done:
+                    self._close_tasks.pop(session_id, None)
+
+            existing_task.add_done_callback(_forget_close_task)
+
+        try:
+            await asyncio.shield(existing_task)
+        finally:
+            if existing_task.done() and self._close_tasks.get(session_id) is existing_task:
+                self._close_tasks.pop(session_id, None)
+        return CloseSessionResponse()
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         # get_session restores a not-in-memory id from the DB (full AIAgent build) and waits
@@ -731,13 +789,17 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
 
     def _claim_turn_or_queue(
         self, state: SessionState, session_id: str, user_text: str, user_content: Any, text_only: bool
-    ) -> str | None:
+    ) -> str | PromptResponse | None:
         """Mark the session running; if a turn is active, redirect it (text-only, supported
         runtime) or queue it. Returns the client message when absorbed, else None."""
         with state.runtime_lock:
+            if state.closing:
+                return PromptResponse(stop_reason="refusal")
             if not state.is_running and not state.command_op:
                 state.is_running = True
                 state.current_prompt_text = user_text or "[Image attachment]"
+                if state.cancel_event:
+                    state.cancel_event.clear()
                 return None
             # Redirect steers a live turn; a state-mutating command (command_op) has none.
             if state.is_running and text_only and isinstance(user_content, str) and hasattr(state.agent, "redirect") and (
@@ -816,11 +878,35 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
                 return {"final_response": f"Error: {e}", "messages": state.history}
 
     async def prompt(self, prompt: list[PromptBlock], session_id: str, **kwargs: Any) -> PromptResponse:
+        """Track each prompt task so session/close can drain it safely."""
+        # _prompt resolves the session off-loop inside the owned task.
+        # Own the inner task, not the RPC caller: cancelling the caller must not
+        # detach an executor/slash-command thread that close still needs to drain.
+        task = asyncio.create_task(self._prompt(prompt=prompt, session_id=session_id, **kwargs))
+        self._active_prompt_tasks[session_id].add(task)
+
+        def _forget_prompt(done: asyncio.Task[Any]) -> None:
+            tasks = self._active_prompt_tasks.get(session_id)
+            if tasks is not None:
+                tasks.discard(done)
+                if not tasks:
+                    self._active_prompt_tasks.pop(session_id, None)
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(_forget_prompt)
+        return await asyncio.shield(task)
+
+    async def _prompt(self, prompt: list[PromptBlock], session_id: str, **kwargs: Any) -> PromptResponse:
         """Run Hermes on the user's prompt and stream events back to the editor."""
         state = await asyncio.to_thread(self.session_manager.get_session, session_id)
         if state is None:
             logger.error("prompt: session %s not found", session_id)
             return PromptResponse(stop_reason="refusal")
+
+        with state.runtime_lock:
+            if state.closing:
+                return PromptResponse(stop_reason="refusal")
 
         user_text = _extract_text(prompt).strip()
         user_content = _content_blocks_to_openai_user_content(prompt)
@@ -844,6 +930,8 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
                 return PromptResponse(stop_reason="end_turn")
 
         absorbed = self._claim_turn_or_queue(state, session_id, user_text, user_content, text_only_prompt)
+        if isinstance(absorbed, PromptResponse):
+            return absorbed
         if absorbed is not None:
             if self._conn:
                 await self._conn.session_update(session_id, acp.update_agent_message_text(absorbed))
@@ -851,8 +939,6 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
 
         logger.info("Prompt on session %s: %s", session_id, user_text[:100])
         conn, loop = self._conn, asyncio.get_running_loop()
-        if state.cancel_event:
-            state.cancel_event.clear()
         cbs = self._wire_turn_callbacks(state, session_id, conn, loop)
 
         def _run_agent() -> dict:
