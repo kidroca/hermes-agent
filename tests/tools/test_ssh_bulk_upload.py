@@ -1,7 +1,12 @@
 """Tests for SSH bulk upload via tar pipe."""
 
 import os
+import shlex
+import shutil
+import stat
 import subprocess
+import tarfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -164,6 +169,125 @@ class TestSSHBulkUpload:
              patch.object(subprocess, "Popen", side_effect=capture_tar_cmd):
             mock_env._ssh_bulk_upload(files)
 
+
+    def test_tar_pipe_uses_file_manifest_and_preserves_parent_metadata(
+        self, mock_env, tmp_path, monkeypatch
+    ):
+        """The real local tar contains files only; remote extraction uses portable flags."""
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/test-agent.sock")
+        f1 = tmp_path / "x.txt"
+        f1.write_text("x")
+        f2 = tmp_path / "y.txt"
+        f2.write_text("y")
+        files = [
+            (str(f1), "/home/testuser/.hermes/cache/x.txt"),
+            (str(f2), "/home/testuser/.hermes/skills/y.txt"),
+        ]
+        tar_calls = []
+        tar_members = []
+        ssh_commands = []
+        real_popen = subprocess.Popen
+
+        def capture_popen(cmd, **kwargs):
+            if cmd[0] == "tar":
+                manifest_path = cmd[cmd.index("-T") + 1]
+                archive_path = tmp_path / "payload.tar"
+                archive_cmd = list(cmd)
+                archive_cmd[archive_cmd.index("-")] = str(archive_path)
+                archive_proc = real_popen(
+                    archive_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=kwargs.get("env"),
+                )
+                _, archive_stderr = archive_proc.communicate()
+                assert archive_proc.returncode == 0, archive_stderr.decode()
+                with tarfile.open(archive_path) as archive:
+                    tar_members.extend(
+                        (member.name, member.isfile()) for member in archive.getmembers()
+                    )
+                tar_calls.append({
+                    "cmd": cmd,
+                    "env": kwargs.get("env", {}),
+                    "manifest": Path(manifest_path).read_bytes(),
+                })
+            else:
+                ssh_commands.append(cmd)
+            return _mock_proc()
+
+        with patch.object(subprocess, "run",
+                          return_value=subprocess.CompletedProcess([], 0)), \
+             patch.object(subprocess, "Popen", side_effect=capture_popen):
+            mock_env._ssh_bulk_upload(files)
+
+        assert len(tar_calls) == 1
+        assert tar_calls[0]["env"]["COPYFILE_DISABLE"] == "1"
+        assert tar_calls[0]["env"]["HOME"] == os.environ["HOME"]
+        assert tar_calls[0]["env"]["SSH_AUTH_SOCK"] == "/tmp/test-agent.sock"
+        assert "--no-xattrs" in tar_calls[0]["cmd"]
+        assert tar_calls[0]["manifest"].split(b"\0") == [
+            b"cache/x.txt",
+            b"skills/y.txt",
+            b"",
+        ]
+        assert tar_members == [
+            ("cache/x.txt", True),
+            ("skills/y.txt", True),
+        ]
+        assert ssh_commands[0][-1] == "tar xf - -C /home/testuser/.hermes"
+        assert "--no-overwrite-dir" not in " ".join(ssh_commands[0])
+
+
+    @pytest.mark.platforms("linux")
+    @pytest.mark.parametrize("creator", [shutil.which("tar"), shutil.which("bsdtar")], ids=["gnu", "bsd"])
+    @pytest.mark.parametrize("extractor", [shutil.which("tar"), shutil.which("bsdtar")], ids=["gnu", "bsd"])
+    @pytest.mark.parametrize("names", [
+        ["skills/file.txt"],
+        ["skills/name\n.", r"skills/back\slash", " spaced name ", "--no-recursion"],
+        [".hermes-tar-entries"],
+    ], ids=["ordinary", "literal-pathnames", "manifest-collision"])
+    def test_real_upload_preserves_files_and_directory_modes(
+        self, mock_env, tmp_path, monkeypatch, creator, extractor, names
+    ):
+        """Exercise the actual tar pipe; only the SSH transport is replaced locally."""
+        # Resolve binaries during collection, before mock_env patches shutil.which.
+        create_bin, extract_bin = creator, extractor
+        if not create_bin or not extract_bin:
+            pytest.skip("Both requested tar implementations must be installed")
+        home = tmp_path / "remote home"
+        base = home / ".hermes"
+        skills = base / "skills"
+        skills.mkdir(parents=True)
+        for directory, mode in [(home, 0o751), (base, 0o711), (skills, 0o700)]:
+            directory.chmod(mode)
+        modes = {p: stat.S_IMODE(p.stat().st_mode) for p in (home, base, skills)}
+        mock_env._remote_home = str(home)
+        monkeypatch.setattr(mock_env, "_run_ssh_checked", lambda *args: None)
+        real_popen = subprocess.Popen
+        files, originals = [], {}
+        for index, name in enumerate(names):
+            source = tmp_path / f"source-{index}"
+            payload = f"new payload {index}".encode()
+            source.write_bytes(payload)
+            destination = base / name
+            destination.write_bytes(b"previous payload")
+            files.append((str(source), str(destination)))
+            originals[source] = payload
+
+        def local_transport(cmd, **kwargs):
+            if cmd[0] == "tar":
+                return real_popen([create_bin, *cmd[1:]], **kwargs)
+            remote = shlex.split(cmd[-1])
+            assert remote[0] == "tar"
+            return real_popen([extract_bin, *remote[1:]], **kwargs)
+
+        with patch.object(subprocess, "Popen", side_effect=local_transport):
+            mock_env._ssh_bulk_upload(files)
+        assert {p: p.read_bytes() for p in originals} == originals
+        for source, destination in files:
+            assert Path(destination).read_bytes() == originals[Path(source)]
+        assert {p: stat.S_IMODE(p.stat().st_mode) for p in modes} == modes
+        assert {str(p.relative_to(base)) for p in base.rglob("*") if p.is_file()} == set(names)
 
     def test_timeout_kills_both_processes(self, mock_env, tmp_path):
         """TimeoutExpired during communicate should kill both processes."""
