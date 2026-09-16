@@ -15,6 +15,7 @@ from tools.environments.base import BaseEnvironment, EnvironmentConnectionError
 from tools.environments.base_output import _popen_bash
 from tools.environments.file_sync import (
     FileSyncManager, iter_sync_files, quoted_mkdir_command, quoted_rm_command, unique_parent_dirs)
+from tools.environments.local import build_subprocess_env
 from tools.environments.remote_common import (
     bash_argv, client_env_with, load_hermes_env_vars, prepend_unset, resolve_passthrough_env, run_capture)
 
@@ -184,10 +185,18 @@ class SSHEnvironment(BaseEnvironment):
             self._run_ssh_checked(quoted_mkdir_command(parents), 30, "remote mkdir failed",
                                   f"Remote directory setup on {self.host}")
 
-        # Symlink staging avoids fragile GNU tar --transform rules. On Windows
-        # without Developer Mode symlink creation raises OSError winerror 1314;
-        # only that case falls back to a plain copy, other OSErrors re-raise.
-        with tempfile.TemporaryDirectory(prefix="hermes-ssh-bulk-") as staging:
+        # Symlink staging avoids fragile GNU tar --transform rules. Archive
+        # only explicit file entries instead of the staging root, otherwise
+        # remote tar sees parent directory headers like `.` and may fail while
+        # trying to restore metadata on restricted systems such as TrueNAS.
+        # On Windows without Developer Mode, symlink creation raises OSError
+        # with winerror 1314 (privilege not held). Only that case falls back to
+        # a plain copy; all other OSErrors re-raise.
+        with (
+            tempfile.TemporaryDirectory(prefix="hermes-ssh-bulk-") as staging,
+            tempfile.TemporaryDirectory(prefix="hermes-ssh-manifest-") as manifest_dir,
+        ):
+            tar_entries: list[str] = []
             for host_path, remote_path in files:
                 try:
                     rel_remote = os.path.relpath(remote_path, base)
@@ -203,12 +212,40 @@ class SSHEnvironment(BaseEnvironment):
                     if getattr(e, "winerror", None) != 1314:
                         raise
                     shutil.copy2(host_path, staged)
+                tar_entries.append(rel_remote)
 
-            # --no-overwrite-dir keeps tar from stamping the staging dir's mode onto
-            # existing dirs (e.g. /home/<user>); a umask-002 0775 home breaks sshd StrictModes.
-            ssh_cmd = self._build_ssh_command() + [f"tar xf - --no-overwrite-dir -C {shlex.quote(base)}"]
-            tar_proc = subprocess.Popen(["tar", "-chf", "-", "-C", staging, "."], stdin=subprocess.DEVNULL,
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Keep control data outside the payload: a same-named staged symlink
+            # must never be followed when opening the manifest for writing.
+            manifest_path = os.path.join(manifest_dir, "entries")
+            with open(manifest_path, "wb") as manifest:
+                for entry in tar_entries:
+                    manifest.write(os.fsencode(entry) + b"\0")
+
+            tar_cmd = [
+                "tar", "--no-xattrs", "-chf", "-",
+                "-C", staging, "--null", "-T", manifest_path,
+            ]
+            ssh_cmd = self._build_ssh_command()
+            # The archive contains explicit file entries only, so portable
+            # extraction cannot overwrite metadata of existing parent dirs.
+            ssh_cmd.append(f"tar xf - -C {shlex.quote(base)}")
+
+            # Preserve the caller's environment for the local tar process while
+            # routing through the shared spawn-env guard. SSH sync may need
+            # caller credentials/config, so this intentionally keeps secrets
+            # and the real HOME; COPYFILE_DISABLE suppresses macOS metadata.
+            tar_env = build_subprocess_env(
+                scrub_secrets=False,
+                inherit_profile_home=False,
+                extra={"COPYFILE_DISABLE": "1"},
+            )
+            tar_proc = subprocess.Popen(
+                tar_cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=tar_env,
+            )
             try:
                 ssh_proc = subprocess.Popen(ssh_cmd, stdin=tar_proc.stdout,
                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
