@@ -2,15 +2,15 @@
 
 ## Scope
 
-Rebuilt `peter/hermes-patches` from upstream `691228447d` after the 4,000+ PR integration wave instead of replaying the old stack mechanically. The resulting candidate contains ten focused functional commits, six independent-review corrections, one documentation commit, and catalogue reconciliation commits.
+Rebuilt `peter/hermes-patches` from upstream `691228447d` after the 4,000+ PR integration wave instead of replaying the old stack mechanically. The resulting candidate contains ten focused functional commits, eight independent-review corrections, one documentation commit, and catalogue reconciliation commits.
 
 ## Active stack
 
 | Commit(s) | Local behavior retained |
 |---|---|
-| `0addfd7e7a`, `321c18132a` | Portable, file-only SSH bulk uploads and no upload work for prompt metadata probes |
+| `0addfd7e7a`, `321c18132a`, `208e2fcbb8` | Portable, file-only SSH bulk uploads with POSIX remote archive paths and no upload work for prompt metadata probes |
 | `891b4f2e54`, `5fc24844ab`, `686c6074cb`, `0d6a498c7a` | Explicit ACP session close with bounded cancellation/drain, serialized replacement-runtime cleanup, resource teardown, preserved history, and safe reopen behavior |
-| `03adb5863d` | Fast TUI startup, workspace freshness, and WSL systemd PATH comparison normalization |
+| `03adb5863d`, `aa12a7891d` | Fast TUI startup, workspace freshness, and WSL-only systemd PATH comparison normalization |
 | `63eb7278a0`, `6b291310b2`, `885c83175d` | Bounded read-only routine Doctor checks plus explicit snapshot-based `--deep` verification with propagated SQLite VM deadlines |
 | `6a45562236` | Fork update status resolved against canonical upstream rather than the fork remote |
 | `920aa29273` | Git-project Hindsight bank routing, mission sync, and reliable retain-failure notices |
@@ -66,6 +66,17 @@ other Doctor tests, and 61 focused browser/CDP tests. Ruff and `git diff
 `35e519688a` candidate: ACP runtime replacement, Doctor deadline propagation,
 and CDP lock canonicalization all passed with no blocking findings. The two
 recovered TUI regression files also passed 9/9 from that immutable worktree.
+
+A delayed first-review result exposed two portability follow-ups. Commit
+`aa12a7891d` restricts drive-shaped `/mnt/<letter>` PATH normalization to WSL,
+so legitimate native-Linux mounts remain part of systemd staleness checks.
+Upstream issue #73163 and open PR #73174 address the related root cause—WSL
+unit generation scraping excessive `/mnt` entries—but current upstream does
+not yet contain that fix. Commit `208e2fcbb8` uses POSIX semantics for SSH
+remote archive members on every host OS and rejects the sync-base path itself
+and all parent escapes. No matching upstream SSH fix was found. The follow-ups
+passed 131 gateway/systemd tests and 31 SSH tests, with one platform skip and
+14 live-SSH skips respectively; Ruff and `git diff --check` passed.
 
 ## Publication guard
 
