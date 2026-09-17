@@ -102,6 +102,12 @@ def test_concurrent_cold_resolution_launches_once(configured, monkeypatch):
     assert launches == [["helper"]]
 
 
+def test_launch_locks_are_scoped_to_the_configured_endpoint():
+    first = cdp._launch_lock_for("http://first.invalid:9222")
+    assert first is cdp._launch_lock_for("http://first.invalid:9222")
+    assert first is not cdp._launch_lock_for("http://second.invalid:9222")
+
+
 @pytest.mark.parametrize("contended", [False, True])
 def test_failed_helper_retry_and_bounded_contention(configured, monkeypatch, contended):
     configured(cdp_url="http://cdp.invalid:9222", cdp_auto_launch=True,
@@ -122,7 +128,7 @@ def test_failed_helper_retry_and_bounded_contention(configured, monkeypatch, con
     monkeypatch.setattr(requests, "get", offline)
     monkeypatch.setattr(subprocess, "run", run)
     if contended:
-        monkeypatch.setattr(cdp, "_cdp_launch_lock", SimpleNamespace(acquire=acquire))
+        monkeypatch.setattr(cdp, "_launch_lock_for", lambda _endpoint: SimpleNamespace(acquire=acquire))
     # Retrying an idempotent helper after failure is supported, not cached forever.
     assert cdp._get_cdp_override() == "http://cdp.invalid:9222"
     assert cdp._get_cdp_override(fallback_to_raw=False) == ""
