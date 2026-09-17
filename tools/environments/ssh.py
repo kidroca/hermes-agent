@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import logging
 import os
+import posixpath
 import shlex
 import shutil
 import subprocess
@@ -41,6 +42,17 @@ def _ensure_ssh_available() -> None:
 def _sync_error(reason: str, subject: str, what: str = "the SSH connection") -> EnvironmentConnectionError:
     return EnvironmentConnectionError(
         reason, retry_hint=f"{subject} failed — verify {what} is healthy, then retry.")
+
+
+def _remote_sync_relative_path(remote_path: str, base: str) -> str:
+    """Return a safe POSIX archive member path beneath the remote sync base."""
+    try:
+        relative = posixpath.relpath(remote_path, base)
+    except ValueError as exc:
+        raise RuntimeError(f"remote path {remote_path!r} is not under sync base {base!r}") from exc
+    if relative in {".", ".."} or relative.startswith("../"):
+        raise RuntimeError(f"remote path {remote_path!r} escapes sync base {base!r}")
+    return relative
 
 
 class SSHEnvironment(BaseEnvironment):
@@ -198,12 +210,7 @@ class SSHEnvironment(BaseEnvironment):
         ):
             tar_entries: list[str] = []
             for host_path, remote_path in files:
-                try:
-                    rel_remote = os.path.relpath(remote_path, base)
-                except ValueError as exc:
-                    raise RuntimeError(f"remote path {remote_path!r} is not under sync base {base!r}") from exc
-                if rel_remote == "." or rel_remote.startswith("../"):
-                    raise RuntimeError(f"remote path {remote_path!r} escapes sync base {base!r}")
+                rel_remote = _remote_sync_relative_path(remote_path, base)
                 staged = os.path.join(staging, rel_remote)
                 os.makedirs(os.path.dirname(staged), exist_ok=True)
                 try:
