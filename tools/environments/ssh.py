@@ -58,8 +58,21 @@ def _remote_sync_relative_path(remote_path: str, base: str) -> str:
 def _local_sync_staging_path(staging: str, relative: str, *, path_module=None) -> str:
     """Map a POSIX archive member beneath a host staging directory."""
     paths = path_module or os.path
-    if paths.sep != "/" and paths.sep in relative:
-        raise RuntimeError(f"remote archive path {relative!r} contains the host path separator")
+    if paths.sep == "\\":
+        reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
+                    *(f"LPT{i}" for i in range(1, 10))}
+        for component in relative.split("/"):
+            stem = component.split(".", 1)[0].upper()
+            invalid = (
+                not component
+                or component.endswith((".", " "))
+                or any(ord(char) < 32 or char in '<>:"\\|?*' for char in component)
+                or stem in reserved
+            )
+            if invalid:
+                raise RuntimeError(
+                    f"remote archive path {relative!r} is not representable on Windows"
+                )
     root = paths.abspath(staging)
     staged = paths.abspath(paths.join(root, *relative.split("/")))
     try:
