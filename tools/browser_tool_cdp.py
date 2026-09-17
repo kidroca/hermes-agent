@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import threading
 from typing import Tuple
+from urllib.parse import urlsplit
 
 from agent.proxy_bypass import loopback_request_kwargs
 from tools.browser_tool_origin import origin_module as _origin
@@ -15,6 +16,28 @@ from tools.browser_tool_origin import origin_module as _origin
 
 _cdp_launch_locks_guard = threading.Lock()
 _cdp_launch_locks: dict[str, threading.Lock] = {}
+
+
+def _cdp_launch_identity(endpoint: str) -> str:
+    """Return one lock identity for equivalent CDP discovery endpoints."""
+    raw = (endpoint or "").strip()
+    try:
+        parsed = urlsplit(raw)
+        scheme = parsed.scheme.lower()
+        path = parsed.path.rstrip("/")
+        if scheme not in {"http", "https", "ws", "wss"} or path not in {"", "/json/version"}:
+            return raw
+        host = parsed.hostname
+        if not host or parsed.query or parsed.fragment:
+            return raw
+        scheme = {"ws": "http", "wss": "https"}.get(scheme, scheme)
+        normalized_host = f"[{host.lower()}]" if ":" in host else host.lower()
+        port = parsed.port
+        if port is not None and port != {"http": 80, "https": 443}[scheme]:
+            normalized_host = f"{normalized_host}:{port}"
+        return f"{scheme}://{normalized_host}"
+    except ValueError:
+        return raw
 
 
 def _launch_lock_for(endpoint: str) -> threading.Lock:
@@ -92,7 +115,7 @@ def _get_cdp_override(*, timeout: float = 10.0, fallback_to_raw: bool = True) ->
         enabled = cfg("cdp_auto_launch", False, is_truthy_value, "browser.cdp_auto_launch")
     command = (os.environ.get("BROWSER_CDP_LAUNCH_COMMAND", "").strip()
                or cfg("cdp_launch_command", "", lambda v: v, "browser.cdp_launch_command"))
-    launch_lock = _launch_lock_for(raw)
+    launch_lock = _launch_lock_for(_cdp_launch_identity(raw))
     if is_truthy_value(enabled) and command and launch_lock.acquire(timeout=16):
         try:
             # Recheck under the lock: concurrent cold sessions must not launch twice.

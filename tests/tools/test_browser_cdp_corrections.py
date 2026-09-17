@@ -108,6 +108,19 @@ def test_launch_locks_are_scoped_to_the_configured_endpoint():
     assert first is not cdp._launch_lock_for("http://second.invalid:9222")
 
 
+def test_equivalent_discovery_endpoints_share_launch_lock():
+    identities = {
+        cdp._cdp_launch_identity("http://CDP.invalid:9222"),
+        cdp._cdp_launch_identity("http://cdp.invalid:9222/"),
+        cdp._cdp_launch_identity("http://cdp.invalid:9222/json/version"),
+        cdp._cdp_launch_identity("ws://cdp.invalid:9222"),
+    }
+    assert identities == {"http://cdp.invalid:9222"}
+    locks = {id(cdp._launch_lock_for(identity)) for identity in identities}
+    assert len(locks) == 1
+    assert cdp._cdp_launch_identity("http://other.invalid:9222") not in identities
+
+
 @pytest.mark.parametrize("contended", [False, True])
 def test_failed_helper_retry_and_bounded_contention(configured, monkeypatch, contended):
     configured(cdp_url="http://cdp.invalid:9222", cdp_auto_launch=True,
