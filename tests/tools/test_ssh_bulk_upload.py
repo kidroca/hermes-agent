@@ -54,6 +54,24 @@ class TestSSHBulkUpload:
             mock_run.assert_not_called()
             mock_popen.assert_not_called()
 
+    def test_remote_archive_entries_always_use_posix_paths(self):
+        assert ssh_env._remote_sync_relative_path(
+            "/home/testuser/.hermes/skills/example/SKILL.md",
+            "/home/testuser/.hermes",
+        ) == "skills/example/SKILL.md"
+
+    @pytest.mark.parametrize("remote_path", [
+        "/home/testuser/.hermes",
+        "/home/testuser",
+        "/home/testuser/.config/settings.json",
+    ])
+    def test_remote_archive_entries_cannot_escape_sync_base(self, remote_path):
+        with pytest.raises(RuntimeError, match="escapes sync base"):
+            ssh_env._remote_sync_relative_path(
+                remote_path,
+                "/home/testuser/.hermes",
+            )
+
     def test_mkdir_batched_into_single_call(self, mock_env, tmp_path):
         """All parent directories should be created in one SSH call."""
         # Create test files
