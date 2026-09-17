@@ -962,14 +962,17 @@ class AIAgent(
         # from the cache and a rebuilt agent spawns its own child, so an unclosed one leaks for the gateway's life.
         _quietly(self._close_codex_session)
 
-    def close(self) -> None:
+    def close(self, *, preserve_session: bool = False) -> None:
         """Release every resource this agent holds (idempotent); each phase is guarded so one failure never
-        blocks the rest."""
+        blocks the rest. ``preserve_session`` retires a replaced runtime without
+        tearing down task-scoped resources or ending the durable session now owned
+        by its replacement."""
         # close() is the hard owner boundary; shutdown_memory_provider() is idempotent so gateway pre-calls
         # never double-extract.
         session_messages = getattr(self, "_session_messages", None)
         _quietly(self.shutdown_memory_provider, session_messages if isinstance(session_messages, list) else None)
-        self._close_task_resources(getattr(self, "session_id", None) or "")
+        if not preserve_session:
+            self._close_task_resources(getattr(self, "session_id", None) or "")
         self._close_active_children(soft=False)
         _quietly(self._drop_shared_client, lambda c: self._close_openai_client(c, reason="agent_close", shared=True))
         self._close_request_clients("agent_close")
@@ -981,7 +984,8 @@ class AIAgent(
         self._db_flush_scan_prefix = None
         self._streamed_assistant_text_parts = []
         _quietly(self._trim_process_memory)
-        _quietly(self._finalize_owned_session_row)
+        if not preserve_session:
+            _quietly(self._finalize_owned_session_row)
 
     # -- close()/release_clients() phases -------------------------------------------------------------
 
