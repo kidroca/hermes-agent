@@ -4,13 +4,19 @@ Split out of ``tools/browser_tool.py``. Facade-owned state is read through ``_bt
 
 import contextlib
 import os
+import shlex
+import subprocess
+import threading
 from typing import Tuple
 
 from agent.proxy_bypass import loopback_request_kwargs
 from tools.browser_tool_origin import origin_module as _origin
 
 
-def _resolve_cdp_override(cdp_url: str) -> str:
+_cdp_launch_lock = threading.Lock()
+
+
+def _resolve_cdp_override(cdp_url: str, *, timeout: float = 10.0, fallback_to_raw: bool = True) -> str:
     """Normalize a user-supplied CDP endpoint into a concrete websocket URL.
 
     Full ``ws://.../devtools/browser/...`` endpoints pass through; HTTP discovery roots and bare ``ws://host:port``
@@ -34,40 +40,81 @@ def _resolve_cdp_override(cdp_url: str) -> str:
     san = _bt._sanitize_url_for_logs
     try:
         import requests  # lazy — shared module object, test patches still apply
-        response = requests.get(version_url, timeout=10, **loopback_request_kwargs(version_url))
+        response = requests.get(version_url, timeout=timeout, **loopback_request_kwargs(version_url))
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
         _bt.logger.warning("Failed to resolve CDP endpoint %s via %s: %s", san(raw), san(version_url), san(exc))
-        return raw
+        return raw if fallback_to_raw else ""
     ws_url = str(payload.get("webSocketDebuggerUrl") or "").strip()
     if ws_url:
         _bt.logger.info("Resolved CDP endpoint %s -> %s", san(raw), san(ws_url))
         return ws_url
     _bt.logger.warning("CDP discovery at %s did not return webSocketDebuggerUrl; using raw endpoint", san(version_url))
-    return raw
+    return raw if fallback_to_raw else ""
 
 
 def _get_cdp_override_raw() -> str:
     """Return the *configured* CDP override without any network I/O.
 
-    Precedence: ``BROWSER_CDP_URL`` env (live ``/browser connect``), then ``browser.cdp_url``. Is-it-configured
+    Precedence: ``BROWSER_CDP_URL`` env (live ``/browser connect``), then ``browser.cdp_url`` / ``browser.cdp_endpoint``. Is-it-configured
     gates (check_fns, ``_is_local_mode`` / ``_is_local_backend``, ``hermes doctor``) MUST use this, not
     :func:`_get_cdp_override`: its 10s HTTP discovery against a stale ``cdp_url`` would stall every startup's
     schema build with no error.
     """
     env_override = os.environ.get("BROWSER_CDP_URL", "").strip()
-    return env_override or _origin()._browser_cfg("cdp_url", "", lambda v: str(v or "").strip(), "browser.cdp_url from config")
+    cfg = _origin()._browser_cfg
+    parse = lambda v: str(v or "").strip()
+    return (env_override or cfg("cdp_url", "", parse, "browser.cdp_url")
+            or cfg("cdp_endpoint", "", parse, "browser.cdp_endpoint"))
 
 
-def _get_cdp_override() -> str:
+def _get_cdp_override(*, timeout: float = 10.0, fallback_to_raw: bool = True) -> str:
     """Resolved CDP URL override, or "" (skips cloud AND local launch).
 
     May perform HTTP ``/json/version`` discovery — only call on paths about to *connect*; pure gates must use
     :func:`_get_cdp_override_raw`.
     """
-    _bt = _origin()
-    return _resolve_cdp_override(raw) if (raw := _get_cdp_override_raw()) else ""
+    raw = _get_cdp_override_raw()
+    if not raw:
+        return ""
+    from utils import is_truthy_value
+    cfg = _origin()._browser_cfg
+    enabled = os.environ.get("BROWSER_CDP_AUTO_LAUNCH")
+    if enabled is None:
+        enabled = cfg("cdp_auto_launch", False, is_truthy_value, "browser.cdp_auto_launch")
+    command = (os.environ.get("BROWSER_CDP_LAUNCH_COMMAND", "").strip()
+               or cfg("cdp_launch_command", "", lambda v: v, "browser.cdp_launch_command"))
+    if is_truthy_value(enabled) and command and _cdp_launch_lock.acquire(timeout=16):
+        try:
+            # Recheck under the lock: concurrent cold sessions must not launch twice.
+            resolved = _resolve_cdp_override(raw, timeout=min(timeout, 1.0), fallback_to_raw=False)
+            if resolved:
+                return resolved
+            _run_cdp_launch_command(command)
+            return _resolve_cdp_override(raw, timeout=timeout, fallback_to_raw=fallback_to_raw)
+        finally:
+            _cdp_launch_lock.release()
+    # Contention is bounded; skip launching and retain normal discovery/fallback.
+    return _resolve_cdp_override(raw, timeout=timeout, fallback_to_raw=fallback_to_raw)
+
+
+def _run_cdp_launch_command(command) -> bool:
+    """Run an opt-in helper, never a shell; discard output that may contain credentials."""
+    if not isinstance(command, (str, list, tuple)):
+        return False
+    from tools.environments.local import served_profile_child_env
+    try:
+        argv = list(command) if isinstance(command, (list, tuple)) else shlex.split(command)
+        if not argv or not all(isinstance(arg, str) and arg for arg in argv):
+            return False
+        result = subprocess.run(argv, shell=False, timeout=15, check=False,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                env=served_profile_child_env())
+        return result.returncode == 0
+    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired):
+        _origin().logger.warning("Configured CDP launch helper failed or timed out")
+        return False
 
 
 def _get_dialog_policy_config() -> Tuple[str, float]:
