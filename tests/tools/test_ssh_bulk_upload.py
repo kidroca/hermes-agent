@@ -1,6 +1,7 @@
 """Tests for SSH bulk upload via tar pipe."""
 
 import os
+import ntpath
 import shlex
 import shutil
 import stat
@@ -59,6 +60,21 @@ class TestSSHBulkUpload:
             "/home/testuser/.hermes/skills/example/SKILL.md",
             "/home/testuser/.hermes",
         ) == "skills/example/SKILL.md"
+
+    def test_windows_staging_preserves_posix_components(self):
+        assert ssh_env._local_sync_staging_path(
+            r"C:\stage",
+            "skills/example/SKILL.md",
+            path_module=ntpath,
+        ) == r"C:\stage\skills\example\SKILL.md"
+
+    def test_windows_staging_rejects_remote_backslash_names(self):
+        with pytest.raises(RuntimeError, match="host path separator"):
+            ssh_env._local_sync_staging_path(
+                r"C:\stage",
+                r"skills\..\..\escape",
+                path_module=ntpath,
+            )
 
     @pytest.mark.parametrize("remote_path", [
         "/home/testuser/.hermes",
