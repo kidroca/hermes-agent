@@ -168,7 +168,7 @@ class TestVaultSupervisorAttach:
         monkeypatch.setattr("hermes_cli.config_effective.load_user_config_effective", lambda: {"browser": {}})
         cli = _fake_cli(tmp_path, 'cat > /dev/null\necho ok\n')
         monkeypatch.setattr(bu_cli, "_find_cli", lambda: [cli])
-        monkeypatch.setattr("tools.browser_session_cdp.resolve_cdp_override", lambda url: url)
+        monkeypatch.setattr("tools.browser_session_cdp.resolve_cdp_override", lambda url, **kwargs: url)
 
         result = json.loads(bu_cli.browser_exec("print(1)", task_id="t-vault"))
 
@@ -192,7 +192,7 @@ cat > /dev/null
 cat "$latch"
 ''')
         monkeypatch.setattr(bu_cli, "_find_cli", lambda: [cli])
-        monkeypatch.setattr("tools.browser_session_cdp.resolve_cdp_override", lambda url: url)
+        monkeypatch.setattr("tools.browser_session_cdp.resolve_cdp_override", lambda url, **kwargs: url)
         drive = lambda **kw: json.loads(bu_cli.browser_exec("print(1)", task_id="t-swap", **kw))["output"].strip()
 
         monkeypatch.setenv("BROWSER_CDP_URL", "http://127.0.0.1:9400")

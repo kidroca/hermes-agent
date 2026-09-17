@@ -108,7 +108,7 @@ cat "$latch"
     monkeypatch.setattr(bu_cli, "_find_cli", lambda: [str(cli)])
     monkeypatch.setattr(bu_cli, "_driven_daemons", {})
     monkeypatch.setattr(bu_cli, "_attach_vault_supervisor", lambda env, task_id: None)
-    monkeypatch.setattr(bs_cdp, "resolve_cdp_override", lambda url: url)
+    monkeypatch.setattr(bs_cdp, "resolve_cdp_override", lambda url, **kwargs: url)
 
     def drive(home, url=None):
         with _profile_runtime_scope(home, hydrate_secrets=False):
