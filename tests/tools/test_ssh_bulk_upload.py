@@ -68,11 +68,20 @@ class TestSSHBulkUpload:
             path_module=ntpath,
         ) == r"C:\stage\skills\example\SKILL.md"
 
-    def test_windows_staging_rejects_remote_backslash_names(self):
-        with pytest.raises(RuntimeError, match="host path separator"):
+    @pytest.mark.parametrize("relative", [
+        r"skills\..\..\escape",
+        "C:/escape",
+        "skills/file:stream",
+        "skills/CON",
+        "skills/trailing.",
+        "skills/trailing ",
+        "skills/question?",
+    ])
+    def test_windows_staging_rejects_unrepresentable_remote_names(self, relative):
+        with pytest.raises(RuntimeError, match="not representable on Windows"):
             ssh_env._local_sync_staging_path(
                 r"C:\stage",
-                r"skills\..\..\escape",
+                relative,
                 path_module=ntpath,
             )
 
