@@ -93,3 +93,67 @@ async def test_close_drains_model_worker_and_rejects_late_claims(tmp_path, monke
         await asyncio.to_thread(finished.wait, 3)
         await asyncio.gather(caller, *closes, return_exceptions=True)
         db.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_model_switch_rejects_busy_then_retires_runtime(tmp_path, monkeypatch):
+    import hermes_cli.model_switch as model_switch
+
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_started = threading.Event()
+    calls = 0
+    runtimes = []
+
+    def factory():
+        runtime = SimpleNamespace(
+            model="test", provider="openrouter", interrupt=MagicMock(),
+            shutdown_memory_provider=MagicMock(), close=MagicMock(),
+        )
+        runtimes.append(runtime)
+        return runtime
+
+    def resolve(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_started.set()
+            assert release_first.wait(10)
+        else:
+            second_started.set()
+        return SimpleNamespace(
+            success=True, target_provider="openrouter",
+            new_model=f"model-{calls}",
+        )
+
+    monkeypatch.setattr(model_switch, "switch_model", resolve)
+    db = SessionDB(tmp_path / "state.db")
+    manager = SessionManager(agent_factory=factory, db=db)
+    server = HermesACPAgent(session_manager=manager)
+    state = manager.create_session()
+    first = asyncio.create_task(server.set_session_model("first", state.session_id))
+    second = None
+    try:
+        assert await asyncio.to_thread(first_started.wait, 3)
+        second = asyncio.create_task(server.set_session_model("second", state.session_id))
+        from acp.exceptions import RequestError
+
+        with pytest.raises(RequestError, match="busy"):
+            await asyncio.wait_for(second, 3)
+        assert not second_started.is_set()
+        assert calls == 1
+        release_first.set()
+        await asyncio.wait_for(first, 3)
+        assert state.command_op is False
+        assert not server._active_model_tasks
+        await server.set_session_model("second", state.session_id)
+        assert second_started.is_set()
+        assert len(runtimes) == 3
+        runtimes[0].close.assert_called_once_with(preserve_session=True)
+        runtimes[1].close.assert_called_once_with(preserve_session=True)
+        runtimes[2].close.assert_not_called()
+    finally:
+        release_first.set()
+        await asyncio.gather(first, *(task for task in (second,) if task), return_exceptions=True)
+        await server.close_session(state.session_id)
+        db.close()
