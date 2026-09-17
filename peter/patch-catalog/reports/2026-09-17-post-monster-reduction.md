@@ -2,13 +2,13 @@
 
 ## Scope
 
-Rebuilt `peter/hermes-patches` from upstream `691228447d` after the 4,000+ PR integration wave instead of replaying the old stack mechanically. The resulting candidate contains ten focused functional commits, eight independent-review corrections, one documentation commit, and catalogue reconciliation commits.
+Rebuilt `peter/hermes-patches` from upstream `691228447d` after the 4,000+ PR integration wave instead of replaying the old stack mechanically. The resulting candidate contains ten focused functional commits, eleven independent-review corrections, one documentation commit, and catalogue reconciliation commits.
 
 ## Active stack
 
 | Commit(s) | Local behavior retained |
 |---|---|
-| `0addfd7e7a`, `321c18132a`, `208e2fcbb8` | Portable, file-only SSH bulk uploads with POSIX remote archive paths and no upload work for prompt metadata probes |
+| `0addfd7e7a`, `321c18132a`, `208e2fcbb8`, `cdb2dfb828`, `6b1b034810`, `d9353e5ea3` | Portable, file-only SSH bulk uploads with pre-write path validation, POSIX remote archive paths, Windows-safe contained staging, and no upload work for prompt metadata probes |
 | `891b4f2e54`, `5fc24844ab`, `686c6074cb`, `0d6a498c7a` | Explicit ACP session close with bounded cancellation/drain, serialized replacement-runtime cleanup, resource teardown, preserved history, and safe reopen behavior |
 | `03adb5863d`, `aa12a7891d` | Fast TUI startup, workspace freshness, and WSL-only systemd PATH comparison normalization |
 | `63eb7278a0`, `6b291310b2`, `885c83175d` | Bounded read-only routine Doctor checks plus explicit snapshot-based `--deep` verification with propagated SQLite VM deadlines |
@@ -74,9 +74,20 @@ Upstream issue #73163 and open PR #73174 address the related root cause—WSL
 unit generation scraping excessive `/mnt` entries—but current upstream does
 not yet contain that fix. Commit `208e2fcbb8` uses POSIX semantics for SSH
 remote archive members on every host OS and rejects the sync-base path itself
-and all parent escapes. No matching upstream SSH fix was found. The follow-ups
-passed 131 gateway/systemd tests and 31 SSH tests, with one platform skip and
-14 live-SSH skips respectively; Ruff and `git diff --check` passed.
+and all parent escapes. Independent review then found that Windows staging
+could reinterpret a valid POSIX backslash as a host separator; `cdb2dfb828`
+adds native-path containment. A second review found further Windows aliases,
+including drive/ADS colons, reserved device names, trailing dots or spaces, and
+invalid or control characters; `6b1b034810` rejects every remote component that
+Windows cannot represent faithfully before staging it. Final review found that
+an escaping destination could still trigger remote directory creation before
+rejection; `d9353e5ea3` validates and canonicalizes the complete upload batch
+before issuing any remote command. No matching upstream SSH fix was found. The
+combined follow-ups passed 131 gateway/systemd tests and 40 SSH tests, with one
+platform skip and 14 live-SSH skips respectively. The final combined focused
+suite passed 171 tests with 15 platform/live-SSH skips; Ruff and `git
+diff --check` passed. Independent review of the immutable `d9353e5ea3`
+candidate found no remaining SSH portability or pre-write side-effect blocker.
 
 ## Publication guard
 
