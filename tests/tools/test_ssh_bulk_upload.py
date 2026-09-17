@@ -97,6 +97,16 @@ class TestSSHBulkUpload:
                 "/home/testuser/.hermes",
             )
 
+    def test_invalid_remote_destination_is_rejected_before_remote_mkdir(self, mock_env, tmp_path):
+        source = tmp_path / "source.txt"
+        source.write_text("content")
+
+        with patch.object(mock_env, "_run_ssh_checked") as remote_command:
+            with pytest.raises(RuntimeError, match="escapes sync base"):
+                mock_env._ssh_bulk_upload([(str(source), "/tmp/escape/file.txt")])
+
+        remote_command.assert_not_called()
+
     def test_mkdir_batched_into_single_call(self, mock_env, tmp_path):
         """All parent directories should be created in one SSH call."""
         # Create test files

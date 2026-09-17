@@ -221,10 +221,10 @@ class SSHEnvironment(BaseEnvironment):
         if not files:
             return
         base = f"{self._remote_home}/.hermes"
-        parents = unique_parent_dirs(files)
-        if parents:
-            self._run_ssh_checked(quoted_mkdir_command(parents), 30, "remote mkdir failed",
-                                  f"Remote directory setup on {self.host}")
+        validated_files = []
+        for host_path, remote_path in files:
+            relative = _remote_sync_relative_path(remote_path, base)
+            validated_files.append((host_path, posixpath.join(base, relative), relative))
 
         # Symlink staging avoids fragile GNU tar --transform rules. Archive
         # only explicit file entries instead of the staging root, otherwise
@@ -238,8 +238,7 @@ class SSHEnvironment(BaseEnvironment):
             tempfile.TemporaryDirectory(prefix="hermes-ssh-manifest-") as manifest_dir,
         ):
             tar_entries: list[str] = []
-            for host_path, remote_path in files:
-                rel_remote = _remote_sync_relative_path(remote_path, base)
+            for host_path, _, rel_remote in validated_files:
                 staged = _local_sync_staging_path(staging, rel_remote)
                 os.makedirs(os.path.dirname(staged), exist_ok=True)
                 try:
@@ -249,6 +248,14 @@ class SSHEnvironment(BaseEnvironment):
                         raise
                     shutil.copy2(host_path, staged)
                 tar_entries.append(rel_remote)
+
+            parents = unique_parent_dirs([
+                (host_path, remote_path)
+                for host_path, remote_path, _ in validated_files
+            ])
+            if parents:
+                self._run_ssh_checked(quoted_mkdir_command(parents), 30, "remote mkdir failed",
+                                      f"Remote directory setup on {self.host}")
 
             # Keep control data outside the payload: a same-named staged symlink
             # must never be followed when opening the manifest for writing.
