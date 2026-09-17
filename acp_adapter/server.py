@@ -259,6 +259,7 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
         self._conn: Optional[acp.Client] = None
         self._active_prompt_tasks: dict[str, set[asyncio.Task[Any]]] = defaultdict(set)
         self._close_tasks: dict[str, asyncio.Task[None]] = {}
+        self._active_model_tasks: dict[str, set[asyncio.Task[Any]]] = defaultdict(set)
 
     # ---- Connection lifecycle -----------------------------------------------
 
@@ -661,9 +662,10 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
                     exc_info=True,
                 )
 
-        # prompt() registers its owned task before its first await. Drain every
-        # task before closing HTTP/SQLite resources used by its worker thread.
-        active = tuple(self._active_prompt_tasks.get(state.session_id, ()))
+        # RPC methods register owned work before yielding after admission. Caller
+        # cancellation must not detach a worker from this teardown boundary.
+        active = (*self._active_prompt_tasks.get(state.session_id, ()),
+                  *self._active_model_tasks.get(state.session_id, ()))
         if active:
             await asyncio.gather(*active, return_exceptions=True)
 
@@ -1115,29 +1117,48 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
         # makes _finish_turn emit a spurious compression-rotation update. Same exclusion as
         # the /model slash command.
         with state.runtime_lock:
+            if state.closing:
+                return None
             if state.is_running or state.command_op:
                 raise acp.RequestError(-32603, "Session is busy; switch models while the session is idle")
             state.command_op = True
+            # Register accepted work before yielding to close_session(). Shielding
+            # keeps client cancellation from detaching the live executor thread.
+            task = asyncio.create_task(asyncio.to_thread(
+                self._switch_model, state, model_id, keep_endpoint=True))
+            self._active_model_tasks[session_id].add(task)
+
+        def _forget_model(done: asyncio.Task[Any]) -> None:
+            # The worker, not the RPC caller, owns the busy reservation.
+            with state.runtime_lock:
+                state.command_op = False
+            tasks = self._active_model_tasks.get(session_id)
+            if tasks is not None:
+                tasks.discard(done)
+                if not tasks:
+                    self._active_model_tasks.pop(session_id, None)
+            if not done.cancelled():
+                done.exception()
+
+        def _schedule_drain(_done: asyncio.Task[Any]) -> None:
+            self._schedule_soon(lambda: self._drain_queued_prompts(state, session_id, self._conn))
+
+        task.add_done_callback(_forget_model)
         try:
-            # switch_model() does synchronous network I/O (models.dev, custom-endpoint probes,
-            # ~10 s cold) — off the loop, like the gateway, so other ACP sessions keep flowing.
             try:
-                _old, requested_provider, resolved_model = await asyncio.to_thread(
-                    self._switch_model, state, model_id, keep_endpoint=True)
+                _old, requested_provider, resolved_model = await asyncio.shield(task)
             except ModelRejected as exc:
-                # A model no provider can serve is a bad ``modelId`` param (-32602), not an agent
-                # internal error (-32603): the client attributes it to the request, not to Hermes (#72439).
-                # Only the switch_model rejection maps here; a ValueError from the rebuild itself
-                # (disabled provider, context window below the floor) stays on the -32603 path.
+                # Only switch_model rejection is a bad modelId; a rebuild ValueError
+                # remains an internal error rather than being relabelled -32602.
                 from acp.exceptions import RequestError
                 raise RequestError.invalid_params({"details": str(exc)}) from exc
         finally:
-            with state.runtime_lock:
-                state.command_op = False
-            # Drain AFTER this response is queued, never inside it: a prompt that arrived
-            # mid-switch would otherwise run a whole turn before the client sees the
-            # (possibly failed) switch result.
-            self._schedule_soon(lambda: self._drain_queued_prompts(state, session_id, self._conn))
+            # Preserve response-before-drain ordering. A cancelled caller must
+            # leave both busy release and queue draining until the worker ends.
+            if task.done():
+                _schedule_drain(task)
+            else:
+                task.add_done_callback(_schedule_drain)
         logger.info(
             "Session %s: model switched to %s via provider %s", session_id, resolved_model, requested_provider
         )

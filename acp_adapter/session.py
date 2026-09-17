@@ -409,13 +409,33 @@ class SessionManager:
         # Record the protocol boundary before AIAgent.close(), whose generic
         # fallback reason is ``agent_close`` and is first-writer-wins.
         db = self._get_db()
+        runtime_id = getattr(agent, "session_id", None)
+        if not isinstance(runtime_id, str) or not runtime_id:
+            runtime_id = state.session_id
         if db is not None:
+            for session_id in dict.fromkeys((state.session_id, runtime_id)):
+                try:
+                    row = db.get_session(session_id)
+                    # Compression parents are structural boundaries, not ACP
+                    # resource closes. Leave their reason and timestamp intact.
+                    if row is not None and row.get("ended_at") is None:
+                        db.end_session(session_id, "acp_close")
+                except Exception:
+                    logger.warning(
+                        "Failed to end durable ACP session %s", session_id, exc_info=True
+                    )
+
+        # Turns use the stable ACP handle as task_id even after compression
+        # rotates the runtime head. Generic close only releases the latter.
+        if runtime_id != state.session_id:
             try:
-                if db.get_session(state.session_id) is not None:
-                    db.end_session(state.session_id, "acp_close")
+                close_task_resources = getattr(agent, "_close_task_resources", None)
+                if callable(close_task_resources):
+                    close_task_resources(state.session_id)
             except Exception:
                 logger.warning(
-                    "Failed to end durable ACP session %s", state.session_id, exc_info=True
+                    "Failed to release ACP task resources for session %s",
+                    state.session_id, exc_info=True,
                 )
 
         try:
