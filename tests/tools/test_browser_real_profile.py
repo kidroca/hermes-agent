@@ -489,7 +489,7 @@ class TestLocalSessionRealProfile:
     def test_local_session_attaches_to_real_profile_cdp(self):
         with patch.object(bt_real_profile, "_real_profile_cdp",
                           return_value=("http://127.0.0.1:9251", None)), \
-             patch.object(bt_cdp, "_resolve_cdp_override", side_effect=lambda u: u):
+             patch.object(bt_cdp, "_resolve_cdp_override", side_effect=lambda u, **kwargs: u):
             info = bt_session._create_local_session("t1")
         assert info["cdp_url"] == "http://127.0.0.1:9251"
         assert info["features"]["real_profile"] is True

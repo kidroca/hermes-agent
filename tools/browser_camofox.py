@@ -78,13 +78,14 @@ def get_camofox_url() -> str:
 
 
 def _config_cdp_url() -> str:
-    """Persistent ``browser.cdp_url`` from config.yaml, or "" (read here, not via
+    """Persistent ``browser.cdp_url`` / ``browser.cdp_endpoint`` from config.yaml, or "" (read here, not via
     ``browser_tool_cdp._get_cdp_override`` — circular import)."""
     try:
         from hermes_cli.config import read_raw_config  # late-bound: tests patch the source module
         browser_cfg = read_raw_config().get("browser", {})
         if isinstance(browser_cfg, dict):
-            return str(browser_cfg.get("cdp_url", "") or "").strip()
+            return (str(browser_cfg.get("cdp_url", "") or "").strip()
+                    or str(browser_cfg.get("cdp_endpoint", "") or "").strip())
     except Exception:
         pass
     return ""

@@ -36,7 +36,7 @@ def test_browser_exec_child_environment(tmp_path, monkeypatch):
     monkeypatch.setattr(bu, "_find_cli", lambda: [sys.executable, str(probe)])
     monkeypatch.setattr("hermes_cli.config.read_raw_config", lambda: {"browser": {"backend": "browser-use"}})
     monkeypatch.setattr("tools.browser_tool_cdp._get_cdp_override", lambda: "")
-    monkeypatch.setattr("tools.browser_tool_cdp._resolve_cdp_override", lambda url: url)
+    monkeypatch.setattr("tools.browser_tool_cdp._resolve_cdp_override", lambda url, **kwargs: url)
     monkeypatch.setattr("tools.browser_tool_cloud._get_cloud_provider", lambda: None)
     monkeypatch.setattr("tools.browser_tool_lightpanda_fallback._using_lightpanda_engine", lambda: False)
     def local_browser(task_id, command, args, **kwargs):

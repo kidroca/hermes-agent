@@ -121,7 +121,7 @@ class TestHybridRoutingSessionCreation:
         }
         monkeypatch.setattr(bt_cloud, "_get_cloud_provider", lambda: provider)
         monkeypatch.setattr("tools.browser_tool_cdp._ensure_cdp_supervisor", lambda t: None)
-        monkeypatch.setattr("tools.browser_tool_cdp._resolve_cdp_override", lambda u: u)
+        monkeypatch.setattr("tools.browser_tool_cdp._resolve_cdp_override", lambda u, **kwargs: u)
 
         session = bt_session._get_session_info("default")
 
