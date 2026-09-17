@@ -2756,6 +2756,16 @@ browser:
   # Optional CDP override — when set, Hermes attaches directly to your own
   # Chromium-family browser (via /browser connect) rather than starting a headless browser.
   cdp_url: ""
+  cdp_endpoint: ""               # Compatibility alias; cdp_url wins when both are set
+  cdp_auto_launch: false         # Opt in to launching a helper only on actual browser use
+  cdp_launch_command: []         # Example: ["/path/to/start-cdp", "--port", "9222"]
+  # Discovery/tool availability never probes or launches. Actual use first probes
+  # for up to 1 second, runs the helper (15-second limit) if unavailable, then
+  # rediscovers the endpoint. Use an idempotent helper that starts the browser and exits:
+  # failed discovery can retry it (including supervisor attachment), and separate Hermes
+  # processes may invoke it concurrently. Within one process, launch + rediscovery are
+  # serialized with a fresh probe; lock waits stop after 16 seconds and skip launching.
+  # A command string is split into argv; shell operators are not executed.
   # Dialog supervisor — controls how native JS dialogs (alert / confirm / prompt)
   # are handled when a CDP backend is attached (Browserbase, local Chromium-family
   # browser via /browser connect). Ignored on Camofox and default local agent-browser mode.
