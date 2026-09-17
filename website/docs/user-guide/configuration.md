@@ -2844,7 +2844,7 @@ browser:
   # rediscovers the endpoint. Use an idempotent helper that starts the browser and exits:
   # failed discovery can retry it (including supervisor attachment), and separate Hermes
   # processes may invoke it concurrently. Within one process, launch + rediscovery are
-  # serialized with a fresh probe; lock waits stop after 16 seconds and skip launching.
+  # serialized per endpoint with a fresh probe; lock waits stop after 16 seconds and skip launching.
   # A command string is split into argv; shell operators are not executed.
   use_real_profile: false        # Browse on a managed copy of your real browser profile (opt-in)
   # Dialog supervisor — how native JS dialogs (alert / confirm / prompt / beforeunload) are handled
