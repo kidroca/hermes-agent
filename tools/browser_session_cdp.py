@@ -22,7 +22,14 @@ _live_overrides_lock = threading.Lock()
 # endpoint; ``get_session_info`` closes one whose profile published in between.
 _live_generations: dict[str, int] = {}
 
-_cdp_launch_lock = threading.Lock()
+_cdp_launch_locks_guard = threading.Lock()
+_cdp_launch_locks: dict[str, threading.Lock] = {}
+
+
+def _launch_lock_for(endpoint: str) -> threading.Lock:
+    """Serialize helper launches for one endpoint without blocking unrelated profiles."""
+    with _cdp_launch_locks_guard:
+        return _cdp_launch_locks.setdefault(endpoint, threading.Lock())
 
 
 def resolve_cdp_override(cdp_url: str, *, timeout: float = 10.0, fallback_to_raw: bool = True) -> str:
@@ -126,7 +133,8 @@ def get_cdp_override(*, timeout: float = 10.0, fallback_to_raw: bool = True) -> 
     from tools.browser_session_cloud import browser_cfg
     from utils import is_truthy_value
     command = browser_cfg("cdp_launch_command", "") if browser_cfg("cdp_auto_launch", False, is_truthy_value) else ""
-    if command and _cdp_launch_lock.acquire(timeout=16):
+    launch_lock = _launch_lock_for(raw)
+    if command and launch_lock.acquire(timeout=16):
         try:
             # Recheck under the lock: concurrent cold sessions must not launch twice.
             resolved = resolve_cdp_override(raw, timeout=min(timeout, 1.0), fallback_to_raw=False)
@@ -135,7 +143,7 @@ def get_cdp_override(*, timeout: float = 10.0, fallback_to_raw: bool = True) -> 
             _run_cdp_launch_command(command)
             return resolve_cdp_override(raw, timeout=timeout, fallback_to_raw=fallback_to_raw)
         finally:
-            _cdp_launch_lock.release()
+            launch_lock.release()
     # Contention is bounded; skip launching and retain normal discovery/fallback.
     return resolve_cdp_override(raw, timeout=timeout, fallback_to_raw=fallback_to_raw)
 
