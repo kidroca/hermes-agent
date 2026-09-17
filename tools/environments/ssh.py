@@ -55,6 +55,22 @@ def _remote_sync_relative_path(remote_path: str, base: str) -> str:
     return relative
 
 
+def _local_sync_staging_path(staging: str, relative: str, *, path_module=None) -> str:
+    """Map a POSIX archive member beneath a host staging directory."""
+    paths = path_module or os.path
+    if paths.sep != "/" and paths.sep in relative:
+        raise RuntimeError(f"remote archive path {relative!r} contains the host path separator")
+    root = paths.abspath(staging)
+    staged = paths.abspath(paths.join(root, *relative.split("/")))
+    try:
+        contained = paths.commonpath((root, staged)) == root
+    except ValueError:
+        contained = False
+    if not contained:
+        raise RuntimeError(f"remote archive path {relative!r} escapes staging directory")
+    return staged
+
+
 class SSHEnvironment(BaseEnvironment):
     """Run commands on a remote machine over SSH.
 
@@ -211,7 +227,7 @@ class SSHEnvironment(BaseEnvironment):
             tar_entries: list[str] = []
             for host_path, remote_path in files:
                 rel_remote = _remote_sync_relative_path(remote_path, base)
-                staged = os.path.join(staging, rel_remote)
+                staged = _local_sync_staging_path(staging, rel_remote)
                 os.makedirs(os.path.dirname(staged), exist_ok=True)
                 try:
                     os.symlink(os.path.abspath(host_path), staged)
