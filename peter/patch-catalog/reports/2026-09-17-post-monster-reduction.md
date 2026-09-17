@@ -62,8 +62,10 @@ correct those findings.
 
 The second corrections passed 182 ACP/close tests, 11 deep-Doctor tests, 152
 other Doctor tests, and 61 focused browser/CDP tests. Ruff and `git diff
---check` passed. A clean immutable follow-up review remains required before
-publication.
+--check` passed. Three independent reviewers then inspected the immutable
+`35e519688a` candidate: ACP runtime replacement, Doctor deadline propagation,
+and CDP lock canonicalization all passed with no blocking findings. The two
+recovered TUI regression files also passed 9/9 from that immutable worktree.
 
 ## Publication guard
 
