@@ -2836,6 +2836,16 @@ browser:
   # Optional CDP override — when set, the browser tools attach to your own
   # Chromium-family browser (as /browser connect does) instead of launching one.
   cdp_url: ""
+  cdp_endpoint: ""               # Compatibility alias; cdp_url wins when both are set
+  cdp_auto_launch: false         # Opt in to launching a helper only on actual browser use
+  cdp_launch_command: []         # Example: ["/path/to/start-cdp", "--port", "9222"]
+  # Discovery/tool availability never probes or launches. Actual use first probes
+  # for up to 1 second, runs the helper (15-second limit) if unavailable, then
+  # rediscovers the endpoint. Use an idempotent helper that starts the browser and exits:
+  # failed discovery can retry it (including supervisor attachment), and separate Hermes
+  # processes may invoke it concurrently. Within one process, launch + rediscovery are
+  # serialized with a fresh probe; lock waits stop after 16 seconds and skip launching.
+  # A command string is split into argv; shell operators are not executed.
   use_real_profile: false        # Browse on a managed copy of your real browser profile (opt-in)
   # Dialog supervisor — how native JS dialogs (alert / confirm / prompt / beforeunload) are handled
   dialog_policy: must_respond    # must_respond | auto_dismiss | auto_accept
