@@ -344,28 +344,39 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
         if not result.success:
             raise ModelRejected(result.error_message or f"Cannot switch to {raw_model}")
         target_provider, new_model = result.target_provider, result.new_model
+        old_agent = state.agent
         endpoint: dict[str, Any] = {}
         if keep_endpoint and not (current_provider and target_provider != current_provider):
             endpoint = {
-                "base_url": getattr(state.agent, "base_url", None), "api_mode": getattr(state.agent, "api_mode", None)
+                "base_url": getattr(old_agent, "base_url", None), "api_mode": getattr(old_agent, "api_mode", None)
             }
         # ACP-provided MCP servers live only on the running agent's toolsets (``_register_session_mcp_servers``);
         # a rebuild that re-derived them from config would silently drop every session MCP tool (#42719).
-        agent = self.session_manager._make_agent(
+        new_agent = self.session_manager._make_agent(
             session_id=state.session_id, cwd=state.cwd, model=new_model,
             requested_provider=target_provider, **endpoint,
-            enabled_toolsets=getattr(state.agent, "enabled_toolsets", None),
-            disabled_toolsets=getattr(state.agent, "disabled_toolsets", None),
+            enabled_toolsets=getattr(old_agent, "enabled_toolsets", None),
+            disabled_toolsets=getattr(old_agent, "disabled_toolsets", None),
         )
         # Assign only after the rebuild succeeded so a failed switch leaves the session on its
         # working model instead of a model/agent mismatch that persists via save_session.
-        state.agent, state.model = agent, new_model
+        state.agent, state.model = new_agent, new_model
         self.session_manager.save_session(state.session_id)
         from hermes_cli.observability.shared_metrics_events import record_model_switch
 
         record_model_switch(
             from_provider=current_provider, to_provider=target_provider, surface="acp", from_model=current_model,
             session_id=state.session_id)
+        try:
+            close = getattr(old_agent, "close", None)
+            if callable(close):
+                close(preserve_session=True)
+        except Exception:
+            logger.warning(
+                "Failed to release replaced ACP runtime for session %s",
+                state.session_id,
+                exc_info=True,
+            )
         return current_provider, target_provider, new_model
 
     @staticmethod

@@ -81,6 +81,7 @@ async def test_close_drains_model_worker_and_rejects_late_claims(tmp_path, monke
         ))
         assert finished.is_set()
         assert len(runtimes) == 2
+        runtimes[0].close.assert_called_once_with(preserve_session=True)
         runtimes[-1].close.assert_called_once()
         runtimes[-1].shutdown_memory_provider.assert_called_once()
         assert manager.get_session(state.session_id) is None
