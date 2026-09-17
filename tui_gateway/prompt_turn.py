@@ -628,6 +628,18 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
     _sync_bot_capabilities(sid, session)  # Bot Chat: adopt Settings->Capabilities edits
     _adopt_out_of_band_turns(session)
     st.agent = agent = session["agent"]
+    # A launch-time store outage can leave an already-built agent unattached even
+    # after submit successfully retries row creation. Repair the final synced agent,
+    # not the one a model/capability rebuild may just have replaced.
+    if getattr(agent, "_session_db", None) is None:
+        if profile_home := session.get("profile_home"):
+            agent._session_db = _open_profile_session_db(profile_home)
+            agent._owns_session_db = True  # one registry acquisition, released by close()
+        else:
+            agent._session_db = _get_db()
+            agent._owns_session_db = False  # borrow the process-owned launch handle
+        if agent._session_db is None:
+            _emit("status.update", sid, {"kind": "warning", "text": "Session storage is unavailable; this turn may not be saved."})
     # Snapshot after the model sync: a deferred switch's history mutation belongs to this turn.
     with session["history_lock"]:
         st.history = list(session["history"])
