@@ -2,23 +2,23 @@
 
 ## Scope
 
-Rebuilt `peter/hermes-patches` from upstream `691228447d` after the 4,000+ PR integration wave instead of replaying the old stack mechanically. The resulting candidate contains ten focused functional commits, one documentation commit, and this catalogue reconciliation.
+Rebuilt `peter/hermes-patches` from upstream `691228447d` after the 4,000+ PR integration wave instead of replaying the old stack mechanically. The resulting candidate contains ten focused functional commits, three independent-review corrections, one documentation commit, and this catalogue reconciliation.
 
 ## Active stack
 
 | Commit(s) | Local behavior retained |
 |---|---|
 | `0addfd7e7a`, `321c18132a` | Portable, file-only SSH bulk uploads and no upload work for prompt metadata probes |
-| `891b4f2e54`, `5fc24844ab` | Explicit ACP session close with bounded cancellation/drain, resource teardown, preserved history, and safe reopen behavior |
+| `891b4f2e54`, `5fc24844ab`, `686c6074cb` | Explicit ACP session close with bounded cancellation/drain, replacement-runtime cleanup, resource teardown, preserved history, and safe reopen behavior |
 | `03adb5863d` | Fast TUI startup, workspace freshness, and WSL systemd PATH comparison normalization |
-| `63eb7278a0` | Bounded read-only routine Doctor checks plus explicit snapshot-based `--deep` verification |
+| `63eb7278a0`, `6b291310b2` | Bounded read-only routine Doctor checks plus explicit snapshot-based `--deep` verification with SQLite VM deadlines |
 | `6a45562236` | Fork update status resolved against canonical upstream rather than the fork remote |
 | `920aa29273` | Git-project Hindsight bank routing, mission sync, and reliable retain-failure notices |
-| `5d97cd142a` | Configured CDP endpoint aliasing and bounded, serialized first-use helper launch |
+| `5d97cd142a`, `104bb14617` | Configured CDP endpoint aliasing and bounded, endpoint-scoped first-use helper launch |
 | `5b7b5b2f23` | End-to-end configured TUI tool-preview budgets, session DB recovery, and finite context estimates |
 | `feff9231e0` | User-facing Doctor and CDP launch documentation |
 
-The seven later functional commits carry `Local-Patch: yes`. The three initial
+The ten later functional commits carry `Local-Patch: yes`. The three initial
 salvage commits (`0addfd7e7a`, `891b4f2e54`, and `321c18132a`) predate that
 trailer discipline and are tracked explicitly in the active catalogue instead
 of rewriting the already-reviewed chain. The exact commit diff from
@@ -51,7 +51,11 @@ Independent execution against the candidate produced:
 - `ui-tui` workspace check: 170 files / 1,771 tests passed, including typecheck, build, and lint. Root `npm run check` remained blocked only by two unrelated Desktop `voice-prefs.test.ts` localStorage failures.
 - Ruff over all changed Python files and `git diff --check`: passed.
 
-A detached immutable review worktree was created at `feff9231e0` for final independent source review before publication.
+A detached immutable review at `feff9231e0` found three blockers: an ACP
+replacement-runtime leak, unbounded SQLite VM walks in deep Doctor, and a
+cross-endpoint CDP launch lock. Commits `686c6074cb`, `6b291310b2`, and
+`104bb14617` correct those findings and require a clean follow-up review before
+publication.
 
 ## Publication guard
 
