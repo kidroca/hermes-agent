@@ -1,5 +1,9 @@
 # Avoid unnecessary TUI npm install on launch
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
 - Patch ref: `5b8b3423e` (reviewed) → `61945e806` (pre-2026-08-09 active) → `c12201be16` (pre-2026-08-14 active) → `ed69cf5942` (pre-refresh active) → `39640471bb` (pre-2026-08-23 active) → `6e19adaeef` (pre-final-refresh active) → `ecb85ddccd` (pre-2026-08-27 active) → `0eefbc09fd` (pre-final-refresh active) → `13e8a3231b` (pre-final-refresh-2 active) → `78a6899c5a` (pre-2026-08-31 active) → `fe486c2ff7` (pre-2026-09-05 active) → `68da9c3d54` (active)
