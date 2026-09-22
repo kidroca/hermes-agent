@@ -1,5 +1,9 @@
 # Honor per-platform Kanban tool opt-in
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-23
 - Repo: `/opt/hermes-agent`
 - Patch ref: `f894287dd` (reviewed) → `93959cbbb` (pre-2026-08-09 active) → `47f6724134` (pre-2026-08-14 active) → `99df17b10b` (pre-refresh active) → `f75cd7b58b` (pre-2026-08-23 active) → `53bae59e4a` (pre-final-refresh active) → `46ed95fd73` (pre-2026-08-27 active) → `9265fa69b0` (pre-final-refresh active) → `e5eed80373` (pre-final-refresh-2 active) → `0cf5bf7b90` (pre-2026-08-31 active) → `2fd50fa003` (pre-2026-09-05 active) → `3adee7b40d` (active)

@@ -1,5 +1,9 @@
 # Preserve Hindsight recall after short acknowledgements
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
 - Patch ref: `78568898e` (reviewed) → `7b85e970e` (pre-2026-08-09 active) → `f120632b37` (pre-2026-08-14 active) → `dc959bb70f` (pre-refresh active) → `8e7a126e4c` (pre-2026-08-23 active) → `ddb78e01f9` (pre-final-refresh active) → `af44c7fa21` (pre-2026-08-27 active) → `4edc96188b` (pre-final-refresh active) → `b7d23d5569` (pre-final-refresh-2 active) → `a34bde06de` (pre-2026-08-31 active) → `7f828a660b` (pre-2026-09-05 active) → `9fca4d7f0d` (active)

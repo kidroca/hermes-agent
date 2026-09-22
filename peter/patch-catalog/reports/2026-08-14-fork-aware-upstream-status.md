@@ -1,5 +1,9 @@
 # Compare fork installs against canonical upstream
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-08-14
 - Repo: `NousResearch/hermes-agent`
 - Patch ref: `feb00ce956c71adea296375074edc5d0d5364a90` → `b74ce0fb60` → `7dd4f18b73` (pre-drop candidate) → `0a47c05930` (pre-final-refresh active) → `d853c44128` (pre-2026-08-27 active) → `bf070c09f9` (pre-final-refresh active) → `d5f8d59f47` (pre-final-refresh-2 active) → `825367ebfa` + `fad37e9536` (pre-2026-08-31 active) → `894a9ab51c` + `d644e77cec` (pre-2026-09-05 active) → `1338e943d5` + `4a71156e66` (active)

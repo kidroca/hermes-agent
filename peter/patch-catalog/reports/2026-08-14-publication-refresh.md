@@ -1,5 +1,9 @@
 # 2026-08-14 Hermes patch-stack publication refresh
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 ## Scope
 
 - Fork lease baseline: `baff1e8f845447f50be1c3cd9d5b6c28479ec928`
