@@ -1,5 +1,9 @@
 # Skip SSH file sync for prompt metadata probes
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-09-06
 - Repo: `NousResearch/hermes-agent` (local fork worktree)
 - Patch base: `a042aa4c08f0d510757d2b0cb8507be2baac3138`

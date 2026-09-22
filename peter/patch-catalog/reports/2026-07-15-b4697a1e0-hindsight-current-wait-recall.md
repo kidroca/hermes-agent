@@ -1,5 +1,9 @@
 # Add current-turn Hindsight recall strategy (historical setting names)
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-15
 - Repo: `/opt/hermes-agent`
 - Patch ref: `b4697a1e0` (reviewed) → `a6f99a6b8` (pre-2026-08-09 active) → `1369da7563` (pre-2026-08-14 active; dropped 2026-08-14)

@@ -1,5 +1,9 @@
 # Bound Doctor state checks and harden FTS verification
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-25
 - Repo: `/opt/hermes-agent`
 - Patch ref: original `5c79641a3`; reviewed rebase `3ddcb19a6` → `3369b6147` (pre-2026-08-09 active) → `94bb2d8215` (pre-2026-08-14 active) → `efc0fad22b` (pre-refresh active) → `26e282bc8c` (pre-2026-08-23 active) → `079a4c7da2` (pre-final-refresh active) → `856adb686c` (pre-2026-08-27 active) → `a7b734af6d` (pre-final-refresh active) → `92092c5137` (pre-final-refresh-2 active) → `04fee974fd` (pre-2026-08-31 active) → `e72bb10508` (pre-2026-09-05 active) → `8dc731583e` (active)

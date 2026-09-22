@@ -1,5 +1,9 @@
 # Sync configured Hindsight bank missions
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-14
 - Repo: `/opt/hermes-agent`
 - Patch ref: `4ee8d0bfb` (reviewed) → `40b1bb407` (pre-2026-08-09 active) → `cfd77f31bd` (pre-2026-08-14 active) → `b49a3ecf1b` (pre-refresh active) → `5e6f1ce42d` (pre-2026-08-23 active) → `b9754b72ff` (pre-final-refresh active) → `cd8ed73f71` (pre-2026-08-27 active) → `235ffe34ba` (pre-final-refresh active) → `b69b18b061` (pre-final-refresh-2 active) → `13087a3ba0` (pre-2026-08-31 active) → `f1a789855f` (pre-2026-09-05 active) → `87e639cfaf` (active)

@@ -1,5 +1,9 @@
 # Show Slack memory context debug notices
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
 - Patch ref: `6e547a2c0` (reviewed) → `231f2eecd` (pre-2026-08-09 active) → `6bfadc1e6c` (pre-2026-08-14 active) → `dd5d9162c6` (pre-refresh active) → `fdfae440b1` (pre-2026-08-23 active) → `2537142766` (pre-final-refresh active) → `82979d8a43` (pre-2026-08-27 active) → `b66511c378` (pre-final-refresh active) → `3cdb1516f7` (pre-final-refresh-2 active) → `e954cfe08e` (pre-2026-08-31 active) → `efece3df9c` (pre-2026-09-05 active) → `f305b88f10` (active)

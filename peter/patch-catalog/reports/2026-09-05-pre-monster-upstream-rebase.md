@@ -1,5 +1,9 @@
 # Pre-monster upstream rebase — 2026-09-05
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Repository: `NousResearch/hermes-agent`
 - Branch: `update/hermes-patches-pre-monster-20260904T215242Z`
 - Previous upstream base: `38b7d0f4cf8a11137d8da5e3d95d7b5b7e41fb46`
