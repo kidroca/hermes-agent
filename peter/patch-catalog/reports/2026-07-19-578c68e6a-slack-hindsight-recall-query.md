@@ -1,5 +1,9 @@
 # Separate Slack Hindsight recall query context
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-19
 - Repo: `/Users/Shared/AI/hermes-agent`
 - Patch ref: `578c68e6a` (reviewed; authored externally as `d75472ae0`) → `95b101e1c` (pre-2026-08-09 active) → `59a62b3ba4` (pre-2026-08-14 active) → `6e39c6976b` (pre-refresh active) → `9d314cfedb` (pre-2026-08-23 active) → `25a8368b62` (pre-final-refresh active) → `66bd3cd05f` (pre-2026-08-27 active) → `d4ab176e98` (pre-final-refresh active) → `c2f13a1e49` (pre-final-refresh-2 active) → `03f4587d1a` (pre-2026-08-31 active) → `17930897d1` (pre-2026-09-05 active) → `477015f083` (active)

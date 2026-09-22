@@ -1,5 +1,9 @@
 # Invalidate stale CDP discovery on browser cleanup
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-30
 - Repo: `NousResearch/hermes-agent`
 - Patch ref: `0bdcb31e5` (reviewed) → `ac4996f6e` (pre-2026-08-09 active) → `3e8ff12c34` (pre-2026-08-14 active) → `e96e6fd77f` (pre-refresh active) → `cde9f265d3` (pre-2026-08-23 active) → `f5dab84ef2` (pre-final-refresh active) → `6e83d5486b` (pre-2026-08-27 active) → `2d093ee5fc` (pre-final-refresh active) → `9826fd913f` (pre-final-refresh-2 active) → `452550c0c3` (pre-2026-08-31 active) → `f1f74a0fb1` (pre-2026-09-05 active) → `f68756293e` (active)

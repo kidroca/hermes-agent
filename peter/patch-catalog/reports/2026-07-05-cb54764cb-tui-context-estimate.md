@@ -1,5 +1,9 @@
 # Estimate TUI context usage without provider token counts
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
 - Patch lineage: `cb54764cb` → pre-2026-07-27 stack `64519d142` → transient rebase `3d85322ca`; dropped on 2026-07-27

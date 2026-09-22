@@ -1,5 +1,9 @@
 # Ring TUI bell on approval prompts
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-05
 - Repo: /opt/hermes-agent
 - Patch ref: `199641e5f` (reviewed) → `bf46af1f5` (pre-2026-08-09 active) → `9a2d0a41ca` (pre-2026-08-14 active) → `300f2bb0f2` (pre-refresh active) → `62c1295ccc` (pre-2026-08-23 active) → `5d7c9902be` (pre-final-refresh active) → `a97af5616a` (pre-2026-08-27 active) → `87149f2c8a` (pre-final-refresh active) → `b24faf6793` (pre-final-refresh-2 active) → `3711154f87` (pre-2026-08-31 active) → `7e88edde68` (historical; dropped 2026-09-05)

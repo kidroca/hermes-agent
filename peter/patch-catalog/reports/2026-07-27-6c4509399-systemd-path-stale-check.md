@@ -1,5 +1,9 @@
 # Ignore volatile WSL drive paths in systemd stale checks
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - **Date:** 2026-07-27
 - **Repo:** `NousResearch/hermes-agent` (Peter's local patch stack)
 - **Patch ref:** `6c4509399` → `0ee8c977f` → `035e797b0` → `b6d6f2e75` → `c4f46a0d9` (pre-2026-08-09 active) → `d301755ee7` (pre-2026-08-14 active) → `92eb8b0c4e` (pre-refresh active) → `236873dac6` (pre-2026-08-23 active) → `cadbdf51e8` (pre-final-refresh active) → `8f6c8e9b21` (pre-2026-08-27 active) → `0f8631adef` (pre-final-refresh active) → `9b300aae68` (pre-final-refresh-2 active) → `9e191512ac` (pre-2026-08-31 active) → `090e902213` (pre-2026-09-05 active) → `9ece46cd35` (active)

@@ -2,9 +2,24 @@
 
 ## Current active stack
 
-This table is authoritative for the post-monster reduced stack. The legacy
-table below is retained as patch archaeology; rows not represented here are
-historical only and must not be replayed without a fresh premise review.
+Authoritative for immutable candidate `0769f3455b` on base `92dd332192`.
+Only this section has active patch claims. Every later table and prior report is
+historical; preserved refs and recommendations are not instructions to replay them.
+
+| Date | Patch ref | Title | Branch | Report | Upstream risk | Recommendation |
+|---|---|---|---|---|---|---|
+| 2026-09-22 | `0addfd7e7a` + `321c18132a` + `208e2fcbb8` + `cdb2dfb828` + `6b1b034810` + `d9353e5ea3` → `be991680f9` + `4af0015a74` + `9435889c90` + `9d8adff651` + `426c0f9258` | Portable file-only SSH uploads | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | Medium | Keep pre-write validation, literal NUL manifest outside staging, POSIX remote paths and Windows containment; prompt no-sync is not a local production delta |
+| 2026-09-22 | `891b4f2e54` + `5fc24844ab` + `686c6074cb` + `0d6a498c7a` → `c0933dc147` + `ce7b571fe6` + `388e15403d` + `d9a8d7495b` | ACP close, owned worker drain and runtime retirement | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | High | Reuse upstream command_op and failed-model handling; final ref is regression coverage, not a second model_lock |
+| 2026-09-22 | `63eb7278a0` + `6b291310b2` + `885c83175d` → `70b79d6498` + `727d0f8e92` + `ac070ab30e` | Safe bounded shallow/deep Doctor | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | Medium | Keep tracked read-only connections, snapshot checks, VM deadlines and interrupt propagation |
+| 2026-09-22 | `6a45562236` → `dfbf559653` | Canonical-upstream fork status and banner | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | High | Keep canonical remote selection, exact counts and comparison-aware cache |
+| 2026-09-22 | `920aa29273` → `b3551b9ce0` | Dynamic Hindsight project routing, missions and notices | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | High | Retain these contracts only; retired recall/display policy stays retired |
+| 2026-09-22 | `5d97cd142a` + `104bb14617` + `dc35eb4155` → `054d15fd5c` + `c7e21c1950` + `1ec78b8d67` | On-demand configured CDP launch | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | Medium-high | Keep launch and endpoint-scoped locks; retirement deferred pending explicit deployment/config switch |
+| 2026-09-22 | `5b7b5b2f23` (DB recovery portion only) → `43dcbf1513` | Recover missing TUI session DB handles | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | Medium | Preview portion dropped by choice; finite estimates are not a local production delta |
+| 2026-09-22 | `feff9231e0` → `121fabf410` | Doctor and CDP launch documentation | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | Low | Keep synchronized with retained behavior |
+
+## Historical September 17 active-table snapshot
+
+All rows below are historical, including their former keep recommendations.
 
 | Date | Patch ref | Title | Branch | Report | Upstream risk | Recommendation |
 |---|---|---|---|---|---|---|
@@ -61,6 +76,8 @@ historical only and must not be replayed without a fresh premise review.
 | 2026-09-06 | `2f826a2b1` | Skip SSH file sync for prompt metadata probes | `peter/hermes-patches` | [report](reports/2026-09-06-2f826a2b1-ssh-prompt-probe-sync.md) | Very high exact overlap with open PR #77933; adjacent lifecycle overlap with #72594/#77508 | Keep local until upstream lands an equivalent no-sync probe path; compare #77933's broader socket/cleanup semantics before dropping |
 
 ## Rebase history
+
+- [2026-09-22: reconcile candidate `0769f3455b` on upstream `92dd332192`](reports/2026-09-22-upstream-rebase.md)
 
 - [2026-09-17: rebuild a reduced local stack on post-monster upstream `691228447d`](reports/2026-09-17-post-monster-reduction.md)
 - [2026-09-05: rebase the patch stack onto pre-monster upstream `63279301bc`, dropping the now-upstream TUI bell patch](reports/2026-09-05-pre-monster-upstream-rebase.md)

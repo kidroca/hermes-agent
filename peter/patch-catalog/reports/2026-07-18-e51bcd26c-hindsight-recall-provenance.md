@@ -1,5 +1,9 @@
 # Recalled-memory provenance
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-18
 - Repo: `/opt/hermes-agent`
 - Patch ref: `e51bcd26c` (reviewed) → `a620386b2` (pre-2026-08-09 active) → `989ac31b25` (pre-2026-08-14 active) → `f6f5d4810d` (pre-refresh active) → `1c078e3e06` (pre-2026-08-23 active) → `cc336cac0b` (pre-final-refresh active) → `81ba50b980` (pre-2026-08-27 active) → `26f055d1d9` (pre-final-refresh active) → `4a46b91b03` (pre-final-refresh-2 active) → `3d2ac62347` (pre-2026-08-31 active) → `82a5516588` (pre-2026-09-05 active) → `5688b53c4d` (active)
