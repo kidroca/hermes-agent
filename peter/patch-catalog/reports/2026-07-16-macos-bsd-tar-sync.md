@@ -1,5 +1,9 @@
 # Support macOS BSD tar during SSH file sync
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-16
 - Repo: /opt/hermes-agent
 - Patch ref: `c9895f4cf` (reviewed) → `53a7b903a` (pre-2026-08-09 active) → `b9b4f366b0` (pre-2026-08-14 active) → `77ba2d467f` (pre-refresh active) → `3edc972c42` (pre-2026-08-23 active) → `0366d7db77` (pre-final-refresh active) → `87864b8f27` (pre-2026-08-27 active) → `fbb3040e10` (pre-final-refresh active) → `b048210441` (pre-final-refresh-2 active) → `16fe841b03` (pre-2026-08-31 active) → `5af82e06e1` (pre-2026-09-05 active) → `18b520f233` (active)

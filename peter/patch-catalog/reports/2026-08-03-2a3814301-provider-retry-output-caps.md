@@ -1,5 +1,9 @@
 # Preserve provider retry output caps
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-08-03
 - Repo: `NousResearch/hermes-agent`
 - Patch ref: `2a381430193d652989e064fc91e856b45ec5f217` → `555d077a4` (pre-2026-08-09 active) → `e506a696e3` (pre-2026-08-14 active) → `e923efb3f6` (pre-refresh active) → `c9519c86e3` (pre-2026-08-23 active) → `0339000898` (historical; dropped 2026-08-23)

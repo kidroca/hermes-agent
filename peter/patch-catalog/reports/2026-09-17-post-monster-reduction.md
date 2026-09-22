@@ -1,5 +1,9 @@
 # 2026-09-17 post-monster patch-stack reduction
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 ## Scope
 
 Rebuilt `peter/hermes-patches` from upstream `691228447d` after the 4,000+ PR integration wave instead of replaying the old stack mechanically. The resulting candidate contains ten focused functional commits, eleven independent-review corrections, one documentation commit, and catalogue reconciliation commits.

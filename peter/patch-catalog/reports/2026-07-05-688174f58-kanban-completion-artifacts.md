@@ -1,5 +1,9 @@
 # Preserve Kanban completion artifacts
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 - Date: 2026-07-05
 - Repo: `/opt/hermes-agent` (`NousResearch/hermes-agent` upstream)
 - Patch ref: `688174f58` (`fix: preserve kanban completion artifacts`)

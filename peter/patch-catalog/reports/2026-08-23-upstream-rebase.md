@@ -1,5 +1,9 @@
 # 2026-08-23 Hermes patch-stack rebase
 
+> Historical report as of 2026-09-22. All refs, active labels, recommendations,
+> and verification below describe the dated historical stack, not the current candidate.
+> See [current reconciliation](2026-09-22-upstream-rebase.md) for active identities and decisions.
+
 ## Scope
 
 - Canonical fork branch: `peter/hermes-patches`
