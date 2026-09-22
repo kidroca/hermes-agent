@@ -8,7 +8,7 @@
 - Old base: `691228447d`
 - Recovery: `recovery/hermes-update-remote-pre-rebase-20260922T103949Z`
 - Patch ref (active): `be991680f9`, `4af0015a74`, `9435889c90`, `9d8adff651`, `426c0f9258`, `c0933dc147`, `ce7b571fe6`, `388e15403d`, `d9a8d7495b`, `70b79d6498`, `727d0f8e92`, `ac070ab30e`, `dfbf559653`, `b3551b9ce0`, `054d15fd5c`, `c7e21c1950`, `1ec78b8d67`, `43dcbf1513`, `121fabf410`
-- Local status: catalogue reconciled; final source verification/review runs separately.
+- Local status: catalogue reconciled; [final source verification and independent review](2026-09-22-final-verification.md) recorded separately.
 - Motivation: retain user-valued contracts while removing obsolete duplicate architecture.
 - Changed files: catalogue Markdown only; no dependency installs or source/test execution.
 
@@ -107,9 +107,10 @@ Parent-provided actual bounded results **before the final base refresh**:
 - Nearby suites: 362 passed, 3 skipped.
 
 These receipts are not attributed to the final `0769f3455b` / `92dd332192` range.
-Final source verification is running separately; no final pass, full-suite result,
-new platform smoke test or final independent approval is invented here. Historical
-September 17 receipts apply only to their historical candidates.
+Final source verification and independent review are now recorded in the
+[final verification receipt](2026-09-22-final-verification.md). No full-suite or
+live deployment certification is implied. Historical September 17 receipts apply
+only to their historical candidates.
 
 This pass ran read-only Git range/diff inspection and catalogue-only verification.
 See [mechanical verification receipt](2026-09-22-catalogue-verification.md).
