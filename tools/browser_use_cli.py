@@ -29,6 +29,7 @@ from hermes_constants import get_hermes_home, hermes_home_key
 from tools.browser_harness_dirs import (
     daemon_env, daemon_identity, harness_current_target, harness_pid_file, namespace_harness_dirs)
 from utils import is_truthy_value
+from tools.browser_cdp_activity import activity_lease
 
 logger = logging.getLogger(__name__)
 
@@ -795,9 +796,8 @@ def _no_code_error(code: str) -> Optional[str]:
 def browser_exec(code: str, session: str = "", timeout_s: int = _DEFAULT_TIMEOUT_S,
                  task_id: Optional[str] = None, local: bool = False):
     """Run Python code through the browser-use CLI, and return its output"""
-    from agent.redact import redact_sensitive_text
     from tools.hosted_tool_policy import hosted_tool_refusal
-    from tools.registry import tool_error, tool_result
+    from tools.registry import tool_error
     # A direct (non-dispatch) entry meets the same allowlist, before any setup.
     if refusal := hosted_tool_refusal("browser_exec") or _no_code_error(code):
         return tool_error(refusal)
@@ -816,6 +816,16 @@ def browser_exec(code: str, session: str = "", timeout_s: int = _DEFAULT_TIMEOUT
     if not cmd:
         return tool_error("browser-harness is missing from Hermes's Python environment. "
                           "Run `hermes update` to re-sync it.")
+
+    with activity_lease():
+        return _browser_exec_active(code, session, timeout_s, task_id, local, cmd, local_sidecar, route_key)
+
+
+def _browser_exec_active(code: str, session: str, timeout_s: int, task_id: Optional[str],
+                         local: bool, cmd: list[str], local_sidecar: bool, route_key: str):
+    """Route and execute one call while its external-CDP activity lease is held."""
+    from agent.redact import redact_sensitive_text
+    from tools.registry import tool_error, tool_result
 
     env = _base_subprocess_env()
     if session:
