@@ -92,17 +92,19 @@ def activity_lease() -> Iterator[None]:
 
     leases = root / "leases"
     lease = leases / f"{os.getpid()}-{threading.get_ident()}-{uuid.uuid4().hex}.lease"
-    with _state_lock(root):
-        leases.mkdir(parents=True, exist_ok=True)
-        lease.write_text(
-            json.dumps({"pid": os.getpid(), "started_at": time.time()}),
-            encoding="utf-8",
-        )
-        _touch(root / "last_used")
-
     stop = threading.Event()
     heartbeat: Optional[threading.Thread] = None
+    publication_started = False
     try:
+        with _state_lock(root):
+            leases.mkdir(parents=True, exist_ok=True)
+            publication_started = True
+            lease.write_text(
+                json.dumps({"pid": os.getpid(), "started_at": time.time()}),
+                encoding="utf-8",
+            )
+            _touch(root / "last_used")
+
         from agent.memory_provider import spawn_context_thread
 
         heartbeat = spawn_context_thread(
@@ -116,6 +118,7 @@ def activity_lease() -> Iterator[None]:
         stop.set()
         if heartbeat is not None and heartbeat.is_alive():
             heartbeat.join()
-        with _state_lock(root):
-            lease.unlink(missing_ok=True)
-            _touch(root / "last_used")
+        if publication_started:
+            with _state_lock(root):
+                lease.unlink(missing_ok=True)
+                _touch(root / "last_used")
