@@ -449,6 +449,7 @@ DEFAULT_CONFIG = {
         "cdp_endpoint": "",  # compatibility alias; cdp_url takes precedence
         "cdp_auto_launch": False,  # run the helper only on actual use after a failed probe
         "cdp_launch_command": "",  # argv list or shell-split string; never executed by a shell
+        "cdp_activity_dir": "",  # optional cross-process lease directory for an external idle watchdog
         # Consent to browse with the user's REAL logins locally: runs on a Hermes-managed SNAPSHOT
         # of the ACTIVE default-Chromium profile (Local State -> profile.last_used; cookies, logins,
         # prefs copied and re-synced per fresh session) driven by Hermes' packaged Chromium. The

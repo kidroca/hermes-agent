@@ -236,6 +236,35 @@ class TestToolSurfaceSwap:
         assert "browser_exec" in names
 
 
+class TestCdpActivityLease:
+    def test_exec_holds_activity_lease_while_routing_and_running(self, tmp_path, monkeypatch):
+        from contextlib import contextmanager
+
+        events = []
+
+        @contextmanager
+        def fake_lease():
+            events.append("enter")
+            try:
+                yield
+            finally:
+                events.append("exit")
+
+        cli = _fake_cli(tmp_path, 'cat > /dev/null\necho ok\n')
+        monkeypatch.setattr(bu_cli, "activity_lease", fake_lease)
+        monkeypatch.setattr(bu_cli, "_find_cli", lambda: [cli])
+        monkeypatch.setattr(
+            bu_cli,
+            "_route_backend",
+            lambda env, session, task_id, local: events.append("route"),
+        )
+
+        result = json.loads(bu_cli.browser_exec("print(1)"))
+
+        assert result["success"] is True
+        assert events == ["enter", "route", "exit"]
+
+
 class TestVaultSupervisorAttach:
     def test_exec_attaches_supervisor_to_the_browser_it_drives(self, tmp_path, monkeypatch, _fake_supervisor_registry):
         """browser_vault_fill injects secrets only over the supervisor's CDP WebSocket. Without this attach the
