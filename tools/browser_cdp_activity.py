@@ -115,7 +115,7 @@ def activity_lease() -> Iterator[None]:
     finally:
         stop.set()
         if heartbeat is not None and heartbeat.is_alive():
-            heartbeat.join(timeout=1.0)
+            heartbeat.join()
         with _state_lock(root):
             lease.unlink(missing_ok=True)
             _touch(root / "last_used")
