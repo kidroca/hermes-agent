@@ -2,7 +2,7 @@
 
 ## Current active stack
 
-Authoritative for immutable candidate `0769f3455b` on base `92dd332192`.
+Authoritative for functional candidate `ed0a742fa9` on base `0592565e2b`.
 Only this section has active patch claims. Every later table and prior report is
 historical; preserved refs and recommendations are not instructions to replay them.
 
@@ -11,6 +11,7 @@ for bounded test results, independent review and deployment limitations.
 
 | Date | Patch ref | Title | Branch | Report | Upstream risk | Recommendation |
 |---|---|---|---|---|---|---|
+| 2026-09-24 | `c57259c0e6` + `78b3c08653` + `3872af22de` + `ed0a742fa9` | Publish external-CDP browser activity leases | `peter/hermes-patches` | [Report](reports/2026-09-24-external-cdp-activity-leases.md) | Medium-high; several open browser lifecycle PRs overlap `tools/browser_use_cli.py`, but none exposes an external-CDP lease protocol | Keep until upstream provides equivalent cross-process activity signaling for operator-owned CDP browsers |
 | 2026-09-22 | `0addfd7e7a` + `321c18132a` + `208e2fcbb8` + `cdb2dfb828` + `6b1b034810` + `d9353e5ea3` → `be991680f9` + `4af0015a74` + `9435889c90` + `9d8adff651` + `426c0f9258` | Portable file-only SSH uploads | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | Medium | Keep pre-write validation, literal NUL manifest outside staging, POSIX remote paths and Windows containment; prompt no-sync is not a local production delta |
 | 2026-09-22 | `891b4f2e54` + `5fc24844ab` + `686c6074cb` + `0d6a498c7a` → `c0933dc147` + `ce7b571fe6` + `388e15403d` + `d9a8d7495b` | ACP close, owned worker drain and runtime retirement | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | High | Reuse upstream command_op and failed-model handling; final ref is regression coverage, not a second model_lock |
 | 2026-09-22 | `63eb7278a0` + `6b291310b2` + `885c83175d` → `70b79d6498` + `727d0f8e92` + `ac070ab30e` | Safe bounded shallow/deep Doctor | `update/hermes-catalogue-20260922` | [Reconciliation](reports/2026-09-22-upstream-rebase.md) | Medium | Keep tracked read-only connections, snapshot checks, VM deadlines and interrupt propagation |
