@@ -97,6 +97,41 @@ def test_exception_inside_operation_releases_lease(configured_home):
     assert list((configured_home / "leases").glob("*.lease")) == []
 
 
+def test_cleanup_waits_for_heartbeat_to_stop_before_unlinking(configured_home, monkeypatch):
+    from agent import memory_provider
+    from tools.browser_cdp_activity import activity_lease
+
+    class DelayedHeartbeat:
+        def __init__(self):
+            self.alive = False
+            self.join_timeouts = []
+
+        def start(self):
+            self.alive = True
+
+        def is_alive(self):
+            return self.alive
+
+        def join(self, timeout=None):
+            self.join_timeouts.append(timeout)
+            if timeout is None:
+                self.alive = False
+
+    heartbeat = DelayedHeartbeat()
+    monkeypatch.setattr(
+        memory_provider,
+        "spawn_context_thread",
+        lambda *args, **kwargs: heartbeat,
+    )
+
+    with activity_lease():
+        assert list((configured_home / "leases").glob("*.lease"))
+
+    assert heartbeat.join_timeouts == [None]
+    assert not heartbeat.is_alive()
+    assert list((configured_home / "leases").glob("*.lease")) == []
+
+
 def test_concurrent_operations_publish_independent_leases(configured_home):
     from tools.browser_cdp_activity import activity_lease
 
