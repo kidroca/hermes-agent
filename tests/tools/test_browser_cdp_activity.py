@@ -71,6 +71,28 @@ def test_active_lease_heartbeat_refreshes_its_mtime(configured_home, monkeypatch
         assert lease.stat().st_mtime_ns > initial
 
 
+def test_publication_failure_after_write_does_not_leak_lease(configured_home, monkeypatch):
+    from tools import browser_cdp_activity as activity
+
+    original_touch = activity._touch
+    calls = 0
+
+    def fail_first_touch(path):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("last_used unavailable")
+        original_touch(path)
+
+    monkeypatch.setattr(activity, "_touch", fail_first_touch)
+
+    with pytest.raises(OSError, match="last_used unavailable"):
+        with activity.activity_lease():
+            pass
+
+    assert list((configured_home / "leases").glob("*.lease")) == []
+
+
 def test_heartbeat_start_failure_does_not_leak_a_lease(configured_home, monkeypatch):
     from agent import memory_provider
     from tools.browser_cdp_activity import activity_lease
