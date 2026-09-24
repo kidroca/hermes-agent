@@ -79,7 +79,7 @@ def _touch(path: Path) -> None:
 def _heartbeat(lease: Path, stop: threading.Event) -> None:
     while not stop.wait(_HEARTBEAT_SECONDS):
         with contextlib.suppress(OSError):
-            lease.touch(exist_ok=False)
+            lease.touch(exist_ok=True)
 
 
 @contextmanager
@@ -101,19 +101,21 @@ def activity_lease() -> Iterator[None]:
         _touch(root / "last_used")
 
     stop = threading.Event()
-    from agent.memory_provider import spawn_context_thread
-
-    heartbeat = spawn_context_thread(
-        _heartbeat,
-        name="browser-cdp-activity",
-        args=(lease, stop),
-    )
-    heartbeat.start()
+    heartbeat: Optional[threading.Thread] = None
     try:
+        from agent.memory_provider import spawn_context_thread
+
+        heartbeat = spawn_context_thread(
+            _heartbeat,
+            name="browser-cdp-activity",
+            args=(lease, stop),
+        )
+        heartbeat.start()
         yield
     finally:
         stop.set()
-        heartbeat.join(timeout=1.0)
+        if heartbeat is not None and heartbeat.is_alive():
+            heartbeat.join(timeout=1.0)
         with _state_lock(root):
             lease.unlink(missing_ok=True)
             _touch(root / "last_used")
