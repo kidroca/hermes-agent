@@ -107,6 +107,10 @@ class MemoryProvider(ABC):
         ``~/.hermes``) and ``platform``; may include ``agent_context`` ("primary" |
         "subagent" | "cron" | "flush" — skip writes for non-primary contexts),
         ``agent_identity``, ``agent_workspace``, ``parent_session_id``, ``user_id``, ``user_id_alt``.
+        ``cwd``/``agent_workspace`` preserve logical remote paths; ``workspace_backend``
+        identifies the execution target, so providers must not probe host Git for remote paths.
+        Optional ``notice_callback(notice)`` and ``notice_clear_callback(key)`` deliver
+        user-visible operation notices on every surface; neither implies automatic recall.
         """
 
     def unavailable_reason(self) -> str:
