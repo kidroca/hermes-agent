@@ -73,6 +73,18 @@ def scope_terminal_cwd() -> str:
     return terminal_env("TERMINAL_CWD", "")
 
 
+def resolve_logical_cwd(configured_cwd: str = "") -> str:
+    """Resolve workspace identity without requiring a local directory (SSH/container paths are valid)."""
+    override = scoped_session_cwd()
+    if override:
+        return override
+    scoped = scope_terminal_cwd().strip()
+    if scoped:
+        return scoped
+    configured = str(configured_cwd or "").strip()
+    return configured if configured not in {"", ".", "auto", "cwd"} else os.getcwd()
+
+
 def _existing_dir(raw: str, label: str) -> Path | None:
     p = Path(raw).expanduser()
     if p.is_dir():
