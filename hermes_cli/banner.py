@@ -156,10 +156,11 @@ def _resolve_repo_dir() -> Optional[Path]:
 
 
 def get_git_banner_state(repo_dir: Optional[Path] = None) -> Optional[dict]:
-    """Return upstream/local git hashes for the startup banner.
+    """Return canonical upstream/local ancestry from locally available refs only.
 
-    Cached per-process (default ``repo_dir`` only): 2-3 git subprocesses (~100ms) whose result
-    cannot change under a running CLI. The cache lets ``prefetch_banner_data()`` pay it off-thread.
+    Cached per-process (default ``repo_dir`` only) for the startup banner. This is
+    advisory ancestry, not freshness or installable-update status; no network I/O.
+    ``prefetch_banner_data()`` pays the read-only git probes off-thread.
     """
     if repo_dir is not None:
         return _compute_git_banner_state(repo_dir)
@@ -179,12 +180,46 @@ def _compute_git_banner_state(repo_dir: Optional[Path] = None) -> Optional[dict]
     repo_dir = repo_dir or _resolve_repo_dir()
     if repo_dir is None:
         return _baked_banner_state()
-    upstream, local = (source_check._git_stdout(["rev-parse", "--short=8", rev], cwd=repo_dir) for rev in ("origin/main", "HEAD"))
-    if not upstream or not local:
-        # Live-git lookup failed (e.g. shallow clone without origin/main).
+    from hermes_cli.source_releases import OFFICIAL_REPOSITORY, _GITHUB_ORIGIN
+
+    local = source_check._git_stdout(["rev-parse", "--short=8", "HEAD"], cwd=repo_dir)
+    if not local:
         return _baked_banner_state()
-    ahead = source_check._git_count(["rev-list", "--count", "origin/main..HEAD"], cwd=repo_dir) or 0
-    return {"upstream": upstream, "local": local, "ahead": max(ahead, 0)}
+    state = {"upstream": None, "local": local, "ahead": None, "behind": None}
+    remotes = source_check._git_stdout(["remote"], cwd=repo_dir) or ""
+    for remote in sorted(remotes.splitlines(), key=lambda name: (name != "origin", name)):
+        # Raw local config avoids insteadOf URL rewrites and never contacts a remote.
+        url = source_check._git_stdout(
+            ["config", "--local", "--get", f"remote.{remote}.url"], cwd=repo_dir)
+        match = _GITHUB_ORIGIN.fullmatch(url or "")
+        if match and match[1].lower() == OFFICIAL_REPOSITORY.lower():
+            upstream_ref = f"refs/remotes/{remote}/main"
+            break
+    else:
+        return state
+    upstream = source_check._git_stdout(["rev-parse", "--verify", "--short=8", upstream_ref], cwd=repo_dir)
+    state["upstream"] = upstream
+    # Shallow/unrelated histories cannot prove an exact carried-commit count.
+    if not upstream or not source_check._git_ok(["merge-base", "HEAD", upstream_ref], cwd=repo_dir):
+        return state
+    if source_check._git_stdout(["rev-parse", "--is-shallow-repository"], cwd=repo_dir) != "false":
+        return state
+    state["ahead"] = source_check._git_count(["rev-list", "--count", f"{upstream_ref}..HEAD"], cwd=repo_dir)
+    state["behind"] = source_check._git_count(["rev-list", "--count", f"HEAD..{upstream_ref}"], cwd=repo_dir)
+    return state
+
+
+def format_git_status(state: Optional[dict]) -> str:
+    """Local-ref ancestry only; never an installable-update recommendation."""
+    if not state:
+        return ""
+    if "behind" not in state:  # Packaged build identity, not a git comparison.
+        return f"local {state['local']}"
+    upstream = state.get("upstream") or "unknown"
+    ahead, behind = state.get("ahead"), state.get("behind")
+    counts = "ancestry unknown" if ahead is None or behind is None else (
+        f"{behind} behind, +{ahead} carried {_plural(ahead, 'commit')}")
+    return f"canonical upstream {upstream} · local {state['local']} ({counts}; local refs)"
 
 
 _RELEASE_URL_BASE = "https://github.com/NousResearch/hermes-agent/releases/tag"
@@ -234,11 +269,7 @@ def format_banner_version_label() -> str:
     state = get_git_banner_state()
     if not state:
         return base
-    upstream, local = state["upstream"], state["local"]
-    ahead = int(state.get("ahead") or 0)
-    if ahead <= 0 or upstream == local:
-        return f"{base} · upstream {upstream}"
-    return f"{base} · upstream {upstream} · local {local} (+{ahead} carried {_plural(ahead, 'commit')})"
+    return f"{base} · {format_git_status(state)}"
 
 
 # === Non-blocking update check ===

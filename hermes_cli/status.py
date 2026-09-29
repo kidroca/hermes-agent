@@ -150,6 +150,10 @@ def _load_ctx_config(ctx) -> None:
 def _render_environment(ctx):
     _section("Environment")
     _kv("Project:", PROJECT_ROOT)
+    from hermes_cli.banner import format_git_status, get_git_banner_state
+    git_status = format_git_status(get_git_banner_state(PROJECT_ROOT))
+    if git_status:
+        _kv("Source:", git_status)
     _kv("Python:", sys.version.split()[0])
     _kv_flag(".env file:", get_env_path().exists(), "exists", "not found")
     _load_ctx_config(ctx)
