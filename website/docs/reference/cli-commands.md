@@ -970,15 +970,8 @@ Subscriptions persist to `~/.hermes/webhook_subscriptions.json` and are hot-relo
 
 ## `hermes doctor`
 
-Routine state.db checks use bounded, read-only queries without full integrity scans or
-synthetic writes. `--deep` verifies SQLite and available FTS indexes (including trigram)
-on a consistent temporary SQLite backup; it can take time and needs temporary disk
-space, but each SQLite integrity pass is interrupted after 60 seconds. The temporary
-database and sidecars are removed afterward. `--fix` retains the existing explicit
-repair and WAL-checkpoint behavior.
-
 ```bash
-hermes doctor [--fix] [--deep]
+hermes doctor [--fix]
 ```
 
 | Option | Description |
