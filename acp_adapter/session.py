@@ -611,21 +611,14 @@ class SessionManager:
         if row is None or row.get("source") != "acp":
             return None
 
-        # A previous adapter process stamped the row ended at its stdio
-        # shutdown (#118216); resuming the conversation reopens it, the same
-        # contract the TUI gateway's cold-resume path uses.
-        if row.get("ended_at") is not None:
-            try:
-                db.reopen_session(session_id)
-            except Exception:
-                logger.debug("Failed to reopen ACP session %s", session_id, exc_info=True)
-
         meta = _parse_model_config(row.get("model_config"))
         cwd, model = meta.get("cwd", "."), row.get("model") or None
 
         was_ended = row.get("ended_at") is not None
         previous_end_reason = row.get("end_reason") or "acp_close"
-        if was_ended and not reopen:
+        # Transport shutdown is recoverable on ordinary cold lookup. An explicit
+        # close needs load/resume; structural lineage is never reopened.
+        if was_ended and not reopen and previous_end_reason != "acp_disconnect":
             return None
 
         # repair_alternation: this list becomes the resumed agent's LIVE conversation; a durable
@@ -637,7 +630,10 @@ class SessionManager:
             return None
 
         reopened = False
-        if reopen and was_ended and previous_end_reason == "acp_close":
+        if was_ended and (
+            previous_end_reason == "acp_disconnect"
+            or (reopen and previous_end_reason == "acp_close")
+        ):
             try:
                 db.reopen_session(session_id)
                 reopened = True
