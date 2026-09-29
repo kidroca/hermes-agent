@@ -117,6 +117,11 @@ def _memory_provider_init_kwargs(agent, platform) -> dict[str, Any]:
     # Documented in MemoryProvider.initialize: forks tell their shape apart by platform + parent.
     if getattr(agent, "_parent_session_id", None):
         kwargs["parent_session_id"] = agent._parent_session_id
+    for key, attr in (("notice_callback", "_emit_notice"),
+                      ("notice_clear_callback", "_emit_notice_clear")):
+        callback = getattr(agent, attr, None)
+        if callable(callback):
+            kwargs[key] = callback
     if kwargs["platform"] == "cli":
         kwargs["warning_callback"] = agent._emit_warning
         kwargs["status_callback"] = agent._emit_status

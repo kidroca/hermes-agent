@@ -131,10 +131,9 @@ class MemoryProvider(ABC):
         store gives ``False`` and a count of 0 or 1; a ``/branch`` child seeded with copied history
         reports the copy. Read both with ``kwargs.get``: older Hermes omits them. A mid-process
         ``/resume`` rebinds through :meth:`on_session_switch` instead.
-        ``cwd``/``agent_workspace`` preserve logical remote paths; ``workspace_backend``
-        identifies the execution target, so providers must not probe host Git for remote paths.
         Optional ``notice_callback(notice)`` and ``notice_clear_callback(key)`` deliver
-        user-visible operation notices on every surface; neither implies automatic recall.
+        structured operation notices through the active driver when it has a sink;
+        neither implies automatic recall.
         """
 
     def unavailable_reason(self) -> str:

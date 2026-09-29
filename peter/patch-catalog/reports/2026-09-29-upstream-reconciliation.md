@@ -2,12 +2,13 @@
 
 - Date: 2026-09-29
 - Candidate worktree: `/home/kidroca/.hermes/worktrees/hermes-update-20260929T103018Z`
-- Frozen code: `8bb68426c165ace735f7ff4d75c13a05d4133481`
+- Original frozen code: `8bb68426c165ace735f7ff4d75c13a05d4133481`
+- Current scope: notice-only reduction following `e89068fe4b`; original ledger below remains historical.
 - Upstream base: `09581cacaa8db3b3241dbbabe76a351a2ce14f60`
 - Old base: `92dd3321929a915479ade608591d40de93965c7b`
 - Recovery: `recovery/hermes-update-local-20260929T103018Z` at `e0d58f3e30313646247df4fb2dc9f96127461e64`
 - Active core refs: `8a95378f3d`, `523ac0608f`, `1858f6ae23`, `8cd0a657b0`, `35a450380c`, `8d53c1b168`, `6ae64b3b6f`, `d3b3f4b088`, `434eb6f3b8`, `6df3677cc3`, `38eaa82cc4`, `27d84716a3`, `de0cffd125`, `57c5226407`, `5d83c0571a`, `68e5fe88ad`, `0849b72862`, `a108959e75`, `4cff3aaab5`, `0b1a7b5521`, `25b3bd0bd9`, `e2768e778b`, `8bb68426c1`
-- Status: documentation-only reconciliation; no installation, configuration, test execution or publication by this catalogue pass.
+- Status: isolated candidate reduction and focused verification; no installation, live configuration change, deployment or publication.
 
 ## Decisions and evidence
 
@@ -42,9 +43,14 @@ historical, not instructions to replay retired behavior.
   not redirect installable fork updates or take over upstream update-cache policy.
 - **Hindsight externally adapted:** upstream `4cbf862abe` removed the bundled
   provider. Old `b3551b9ce0` splits into generic core bridge `27d84716a3` and the
-  external port below. Do not restore deleted vendor code in Hermes core. Logical
-  remote workspaces are preserved without host-Git probing; scoped backend and
-  notice callbacks reach the provider. Git-common project routing, explicit remote
+  external port below. The follow-up removes the unnecessary workspace portion
+  of `27d84716a3`: cwd/config/backend handling and `agent_workspace` match upstream
+  `09581cacaa` exactly, including the existing `"hermes"` workspace label rather
+  than substituting a path into provider `{workspace}` templates. Only optional
+  `notice_callback` / `notice_clear_callback` plumbing remains for structured
+  retention alerts. The external plugin resolves routing through stock scoped
+  APIs, with no dependency on a core workspace bridge. Do not restore deleted
+  vendor code in Hermes core. Git-common project routing, explicit remote
   overrides/safe unresolved fallback, mission synchronization, and demand-driven
   retain failure/recovery notices remain. Async acceptance is not completion;
   recovery requires confirmed success. Automatic recall remains independently
@@ -60,7 +66,12 @@ historical, not instructions to replay retired behavior.
 
 - Repository/worktree: `/home/kidroca/.hermes/worktrees/hindsight-plugin-20260929`
 - Baseline: `85333e16578bcc6d66c552be73ddf7df9aaf99d3` (`85333e1`)
-- Active port: `10c543b3a4d7cf020fd0efbf955f710dff101126`
+- Port: `10c543b3a4d7cf020fd0efbf955f710dff101126`
+- Deployment-preparation follow-up supplied by the plugin worker: `d13074c2`
+  in `kidroca/hindsight`, branch `peter/hermes-hindsight`. This is a separate
+  repository commit, not evidence of live deployment or publication.
+- PR #4940 stays narrow and stock-compatible: project routing uses existing
+  scoped APIs; the personal core notice bridge is optional, not a routing prerequisite.
 - Catalog source: `https://github.com/vectorize-io/hindsight`, subdirectory
   `hindsight-integrations/hermes`, pinned source
   `176f8c2de1369f569c489b831d143b78128b5535`.
@@ -75,6 +86,36 @@ historical, not instructions to replay retired behavior.
 - Catalog caveat remains: embedded mode at the pinned provider uses a retired
   lazy-install path on PM-managed Hermes; prefer supported cloud/local-external
   modes. No mode or live profile was changed here.
+
+## Notice-only reduction verification
+
+The reduction modifies `agent/agent_init.py`, `agent/memory_provider.py` and
+`agent/runtime_cwd.py`, replaces `test_memory_workspace_notice_bridge.py` with
+`tests/agent/test_memory_notice_bridge.py`, and updates this report and index.
+Against upstream `09581cacaa`, the three production files now differ only by
+five lines of optional callback wiring and three documentation lines;
+`runtime_cwd.py` is byte-identical. Unrelated ACP and other patch families are untouched.
+
+Canonical isolated run (candidate Python 3.14.4; no installs):
+
+```sh
+HOME=$PWD/.venv/test-home HERMES_PYTHON=$PWD/.venv/bin/python scripts/run_tests.sh \
+  tests/agent/test_memory_notice_bridge.py tests/agent/test_memory_provider_init.py \
+  tests/agent/test_memory_provider.py tests/agent/test_memory_agent_context.py \
+  tests/agent/test_memory_user_id.py tests/agent/test_memory_recall_indicator.py \
+  tests/agent/test_runtime_cwd.py
+```
+
+Result: **7 files, 89 passed, 0 failed**. The six new parametrized cases exercise
+actual external plugin loading, `MemoryManager`, `StatusOutputMixin`, structured
+notice identity, failure/recovery clear delivery, absent/broken driver sinks,
+CLI-only status behavior and optional non-callable method omission. They do not
+claim end-to-end rendering by every driver. With only the callback wiring removed,
+the new file produces **4 failed, 2 passed** (`KeyError: notice_callback`); restoring
+it returns the focused run to green. `git diff --check` passes.
+
+Independent review of this changed delta remains for the coordinating agent;
+prior review and the prior 330-test receipt below predate this reduction.
 
 ## Exact commit ledger
 
