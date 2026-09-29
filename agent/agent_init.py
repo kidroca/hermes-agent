@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse, urlunparse
 
 from agent.context_compressor import ContextCompressor
 from agent.agent_init_fallback import _fallback_entries, _init_fallback_chain, recompute_init_fallback_api_mode
+from agent.agent_init_memory import _memory_provider_init_kwargs
 from agent.agent_runtime_helpers import _ra
 from agent.iteration_budget import IterationBudget, normalize_budget_warning_ratio
 from agent.memory_manager import StreamingContextScrubber
@@ -1255,52 +1256,6 @@ def _apply_display_config(agent, _agent_cfg, platform):
         _ra().logger.warning("Tool loop guardrail config ignored: %s", _tlg_err)
 
 
-def _memory_provider_init_kwargs(agent, platform, *, configured_cwd="", configured_backend="local") -> dict[str, Any]:
-    """Scoping kwargs for ``MemoryManager.initialize_all`` (status_callback is CLI-only:
-    gateway status travels a different path and the indicator no-ops without it)."""
-    kwargs = {
-        "session_id": agent.session_id,
-        "platform": platform or "cli",
-        "hermes_home": str(get_hermes_home()),
-        # platform="cron" (scheduler) / "subagent" (delegate_task) → providers skip writes (MemoryProvider.initialize).
-        "agent_context": platform if platform in ("cron", "subagent") else "primary",
-    }
-    for key, attr in (("notice_callback", "_emit_notice"),
-                      ("notice_clear_callback", "_emit_notice_clear")):
-        callback = getattr(agent, attr, None)
-        if callable(callback):
-            kwargs[key] = callback
-    if kwargs["platform"] == "cli":
-        kwargs["warning_callback"] = agent._emit_warning
-        kwargs["status_callback"] = agent._emit_status
-    # Session title (e.g. honcho derives chat-scoped session keys from it).
-    if agent._session_db:
-        with suppress(Exception):
-            _st = agent._session_db.get_session_title(agent.session_id)
-            if _st:
-                kwargs["session_title"] = _st
-                _source = agent._session_db.get_session_title_source(agent.session_id)
-                if _source:
-                    kwargs["session_title_source"] = _source
-    # Gateway user/chat identity for per-user scoping (gateway_session_key: stable per-chat
-    # Honcho session isolation).
-    for _ident in _GATEWAY_IDENTITY_PARAMS:
-        _val = getattr(agent, f"_{_ident}")
-        if _val:
-            kwargs[_ident] = _val
-    from agent.runtime_cwd import resolve_logical_cwd
-    kwargs["cwd"] = agent.session_cwd or resolve_logical_cwd(configured_cwd)
-    kwargs["agent_workspace"] = kwargs["cwd"]
-    from tools.terminal_scope import terminal_env
-    kwargs["workspace_backend"] = terminal_env("TERMINAL_ENV", configured_backend)
-    # Profile identity for per-profile provider scoping
-    with suppress(Exception):
-        from hermes_cli.profiles import get_active_profile_name
-        kwargs["agent_identity"] = get_active_profile_name()
-
-    return kwargs
-
-
 def _init_memory(agent, _agent_cfg, skip_memory, platform, memory_manager=None):
     # Persistent memory (MEMORY.md + USER.md) — loaded from disk
     agent._memory_store = None
@@ -1370,10 +1325,7 @@ def _init_memory(agent, _agent_cfg, skip_memory, platform, memory_manager=None):
                     _warn_memory_provider_unavailable(
                         _mem_provider_name, _unavailable_reason, say=agent._emit_startup_warning)
                 if agent._memory_manager.providers:
-                    agent._memory_manager.initialize_all(**_memory_provider_init_kwargs(
-                        agent, platform,
-                        configured_cwd=_cfg_dict(_agent_cfg, "terminal").get("cwd", ""),
-                        configured_backend=_cfg_dict(_agent_cfg, "terminal").get("backend", "local")))
+                    agent._memory_manager.initialize_all(**_memory_provider_init_kwargs(agent, platform))
                     _ra().logger.info("Memory provider '%s' activated", _mem_provider_name)
                 else:
                     _ra().logger.debug("Memory provider '%s' not found or not available", _mem_provider_name)

@@ -2,7 +2,8 @@
 
 ## Current active stack
 
-Authoritative for frozen code `8bb68426c165ace735f7ff4d75c13a05d4133481` on upstream
+Authoritative for the candidate including the notice-only reduction following
+`e89068fe4b` on upstream
 `09581cacaa8db3b3241dbbabe76a351a2ce14f60`. Only this table has active core patch claims.
 See the [September 29 reconciliation and verification receipt](reports/2026-09-29-upstream-reconciliation.md)
 for exact lineage, intentional Doctor retirement and the separately versioned Hindsight port.
@@ -13,14 +14,17 @@ All later tables and prior receipts are historical.
 | 2026-09-29 | `8a95378f3d` + `523ac0608f` + `1858f6ae23` + `8cd0a657b0` + `35a450380c` | Portable file-only SSH uploads | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Retain pre-write validation, NUL file manifests, POSIX remote paths and Windows containment; adapt platform test marker only. |
 | 2026-09-29 | `8d53c1b168` + `6ae64b3b6f` + `d3b3f4b088` + `434eb6f3b8` + `6df3677cc3` | ACP explicit close, worker drain and runtime retirement | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Retain close/history/drain contracts; compose upstream disconnect reopening with explicit-close boundaries. |
 | 2026-09-29 | `38eaa82cc4` | Canonical ancestry advisory (separate from installable updates) | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Adapt obsolete checker into local-ref banner/status advisory; leave upstream update selection/cache ownership intact. |
-| 2026-09-29 | `27d84716a3` | Generic external-memory workspace and notice bridge | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Retain logical workspace/backend and notice callbacks; Hindsight-specific behavior lives in the separate external port below. |
+| 2026-09-29 | `27d84716a3` (notice-only follow-up in this revision) | Generic external-memory structured notice bridge | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Retain only optional notice/clear callbacks for retention alerts. Routing uses stock scoped APIs without a core dependency; preserve upstream workspace semantics. |
 | 2026-09-29 | `de0cffd125` + `57c5226407` + `5d83c0571a` | On-demand configured CDP launch | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Retain bounded launch, endpoint-scoped canonical locks and stale-discovery cleanup. |
 | 2026-09-29 | `68e5fe88ad` | TUI missing session database handle recovery | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Retain DB recovery; do not restore historically retired preview/estimate policies. |
 | 2026-09-29 | `0849b72862` + `a108959e75` + `4cff3aaab5` + `0b1a7b5521` + `25b3bd0bd9` | External-CDP activity leases (five formerly unpublished commits) | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Retain four implementation commits plus their catalogue commit; upstream harness import/preflight context adapted. |
 | 2026-09-29 | `e2768e778b` + `8bb68426c1` | Retained CDP documentation and Doctor retirement correction | [Reconciliation](reports/2026-09-29-upstream-reconciliation.md) | Keep CDP documentation; remove obsolete deep-Doctor instructions. Doctor implementation family intentionally retired by Peter. |
 
 The Hindsight-specific port is external, not a core ancestor: see the report for
-`10c543b3a4d7cf020fd0efbf955f710dff101126` and its baseline/source provenance.
+`10c543b3a4d7cf020fd0efbf955f710dff101126`, deployment-preparation follow-up
+`d13074c2` in `kidroca/hindsight` on `peter/hermes-hindsight`, and baseline/source
+provenance. PR #4940 remains narrow and stock-compatible. No deployment or
+publication is claimed here.
 
 ## Historical September 24 active-table snapshot
 
