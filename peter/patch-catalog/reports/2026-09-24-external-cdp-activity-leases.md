@@ -1,5 +1,8 @@
 # Publish external-CDP browser activity leases
 
+> Historical report and execution receipt. Current refs and decisions are in the
+> [September 29 reconciliation](2026-09-29-upstream-reconciliation.md). Former active refs below are lineage only.
+
 - Date: 2026-09-24
 - Repo: `NousResearch/hermes-agent`
 - Base ref: `0592565e2b`

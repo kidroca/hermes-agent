@@ -1,5 +1,8 @@
 # 2026-09-22 upstream rebase catalogue reconciliation
 
+> Historical report and execution receipt. Current refs and decisions are in the
+> [September 29 reconciliation](2026-09-29-upstream-reconciliation.md). Former active refs below are lineage only.
+
 - Date: 2026-09-22
 - Repo: `/home/kidroca/.hermes/worktrees/hermes-update-catalogue-20260922`
 - Branch: `update/hermes-catalogue-20260922` (documentation integration worktree)
