@@ -449,12 +449,17 @@ class SessionManager:
                 exc_info=True,
             )
         finally:
-            with self._lock:
-                if self._sessions.get(state.session_id) is state:
-                    self._sessions.pop(state.session_id, None)
-            self._remember_closed(state.session_id)
-            from tools.terminal_tool import clear_task_env_overrides
-            clear_task_env_overrides(state.session_id)
+            # Explicit load/resume uses this same gate. Publish the removal,
+            # tombstone and cwd release together before a replacement can install.
+            with self._restore_lock:
+                with self._lock:
+                    owned = self._sessions.get(state.session_id) is state
+                    if owned:
+                        self._sessions.pop(state.session_id, None)
+                if owned:
+                    self._remember_closed(state.session_id)
+                    from tools.terminal_tool import clear_task_env_overrides
+                    clear_task_env_overrides(state.session_id)
 
     # ---- persistence via SessionDB ------------------------------------------
 

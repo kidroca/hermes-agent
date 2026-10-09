@@ -360,6 +360,12 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
         )
         # Assign only after the rebuild succeeded so a failed switch leaves the session on its
         # working model instead of a model/agent mismatch that persists via save_session.
+        # Retirement preserves task resources; their cleanup owner must survive
+        # even if the replacement closes before its first conversation turn.
+        new_agent._process_owner_task_ids = {
+            *getattr(new_agent, "_process_owner_task_ids", ()),
+            *getattr(old_agent, "_process_owner_task_ids", ()),
+        }
         state.agent, state.model = new_agent, new_model
         self.session_manager.save_session(state.session_id)
         from hermes_cli.observability.shared_metrics_events import record_model_switch
@@ -659,6 +665,7 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
 
     async def _close_active_session(self, state: SessionState) -> None:
         """Cancel active work, then release one session off the event loop."""
+        previous_runtime_id = str(getattr(state.agent, "session_id", "") or "")
         with state.runtime_lock:
             if state.is_running and state.current_prompt_text:
                 state.interrupted_prompt_text = state.current_prompt_text
@@ -679,6 +686,16 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
                   *self._active_model_tasks.get(state.session_id, ()))
         if active:
             await asyncio.gather(*active, return_exceptions=True)
+
+        # Background children detach from the turn's fan-out. Match both heads
+        # when a drained turn compressed or replaced its runtime before closing.
+        from tools.async_delegation import interrupt_for_session
+        for parent_id in dict.fromkeys((
+            state.session_id, previous_runtime_id,
+            str(getattr(state.agent, "session_id", "") or ""),
+        )):
+            if parent_id:
+                interrupt_for_session(parent_session_id=parent_id, reason="acp_close")
 
         await asyncio.to_thread(self.session_manager.finish_close, state)
         logger.info("Closed ACP session %s", state.session_id)
