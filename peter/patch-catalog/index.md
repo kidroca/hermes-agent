@@ -2,6 +2,31 @@
 
 ## Current active stack
 
+Authoritative for frozen functional candidate `d0b8381778` on upstream
+`8bff64d6ed3414a66976bfa8ab72c14b6bca2a6f`. Only this table has active core patch claims.
+See the [October 9 reconciliation and verification receipt](reports/2026-10-09-upstream-reconciliation.md)
+for exact retained lineage, independently reviewed corrective changes and limitations.
+All later tables and prior receipts are historical, not replay instructions.
+
+| Date | Patch ref | Title | Report | Recommendation |
+|---|---|---|---|---|
+| 2026-10-09 | `8a95378f3d` + `523ac0608f` + `1858f6ae23` + `8cd0a657b0` + `35a450380c` → `09569c8c85` + `a1203b14d2` + `73a84f541c` + `8560536e20` + `5bf03f258b` | Portable file-only SSH uploads | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Retain pre-write validation, NUL manifests, POSIX paths and Windows containment; preserve upstream optional no-sync construction. |
+| 2026-10-09 | `8d53c1b168` + `6ae64b3b6f` + `d3b3f4b088` + `434eb6f3b8` + `6df3677cc3` → `3b3a308c24` + `9bfa349f24` + `fc63477679` + `91a85444cf` + `1a89ad0e21` + `d0b8381778` | ACP close, worker drain and runtime ownership | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Retain durable history and disconnect reopening; serialize close/load publication, interrupt detached children and carry process ownership across model replacement. |
+| 2026-10-09 | `38eaa82cc4` → `bec721897b` | Canonical ancestry advisory | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Keep separate from fork update selection; upstream summary omits environment details, Source ancestry is in banner/full status. |
+| 2026-10-09 | `27d84716a3` + `07c1171063` → `8fa25cabad` + `c1d013b116` | Generic external-memory structured notice bridge | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Retain optional callbacks only, preserve stock workspace semantics and mandatory egress scrubbing; extracted sibling helpers satisfy facade ratchets. |
+| 2026-10-09 | `de0cffd125` + `57c5226407` + `5d83c0571a` → `cb13b13673` + `dfe271189a` + `d5b03ba057` | On-demand configured CDP launch | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Retain bounded launch and canonical endpoint locks; fixture signatures/status fields match upstream without weakening assertions. |
+| 2026-10-09 | `68e5fe88ad` → `0b42ce86dd` | TUI missing session database handle recovery | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Preserve recovery after final synchronization, profile ownership and upstream admission/settlement ordering. |
+| 2026-10-09 | `0849b72862` + `a108959e75` + `4cff3aaab5` + `0b1a7b5521` + `25b3bd0bd9` → `47b433357f` + `6fa1948ec7` + `13eda3a05e` + `19e407ef29` + `5e3107cbca` | External-CDP activity leases | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Keep cross-process activity/heartbeat/cleanup contracts; diagnostic logging remains optional fail-open, upstream harness cleanup stays intact. |
+| 2026-10-09 | `e2768e778b` + `8bb68426c1` → `4d70117e69` + `3ec89c64a8` | Retained CDP docs and Doctor retirement correction | [Reconciliation](reports/2026-10-09-upstream-reconciliation.md) | Keep historical provenance; do not restore retired Doctor implementation, memory routing or recall/display policies. |
+
+External Hindsight is separately versioned; this update does not modify its
+repository, plugin source pin or live configuration. See the historical deployment receipt.
+
+## Historical September 29 active-table snapshot
+
+The former active section below is preserved verbatim as history; its claims of
+current authority and keep recommendations no longer apply.
+
 Authoritative for the candidate including the notice-only reduction following
 `e89068fe4b` on upstream
 `09581cacaa8db3b3241dbbabe76a351a2ce14f60`. Only this table has active core patch claims.
@@ -109,6 +134,8 @@ All rows below are historical, including their former keep recommendations.
 | 2026-09-06 | `2f826a2b1` | Skip SSH file sync for prompt metadata probes | `peter/hermes-patches` | [report](reports/2026-09-06-2f826a2b1-ssh-prompt-probe-sync.md) | Very high exact overlap with open PR #77933; adjacent lifecycle overlap with #72594/#77508 | Keep local until upstream lands an equivalent no-sync probe path; compare #77933's broader socket/cleanup semantics before dropping |
 
 ## Rebase history
+
+- [2026-10-09: retain 34 patches, correct ACP resource handoffs and refresh to upstream `8bff64d6ed`](reports/2026-10-09-upstream-reconciliation.md)
 
 - [2026-09-29: reconcile frozen candidate `8bb68426c1` on upstream `09581cacaa`](reports/2026-09-29-upstream-reconciliation.md)
 
