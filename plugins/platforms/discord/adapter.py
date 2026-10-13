@@ -5761,6 +5761,7 @@ class DiscordAdapter(DiscordMediaMixin, DiscordThreadTitlesMixin, DiscordVoiceIn
             choices = set(prompt.choices)
             view = ExecApprovalView(
                 session_key=prompt.session_key, allowed_user_ids=self._allowed_user_ids,
+                request_id=(prompt.metadata or {}).get("approval_request_id"),
                 allowed_role_ids=self._allowed_role_ids, require_admin=require_admin,
                 admin_user_ids=admin_user_ids, allow_permanent="always" in choices,
                 allow_session="session" in choices, smart_denied=prompt.smart_denied,
@@ -6482,16 +6483,17 @@ def _define_discord_view_classes() -> None:
             await self._expire_embed(t("platform.discord.prompt.expired_footer"))
 
     class ExecApprovalView(_HermesView):
-        """Allow Once / Allow Session / Always Allow / Deny buttons for a dangerous command.
-        Clicks call ``resolve_gateway_approval()`` — the same mechanism as the text ``/approve`` flow."""
+        """Approval buttons bound to one gateway queue request."""
 
         def __init__(
             self, session_key: str, allowed_user_ids: set, allowed_role_ids: Optional[set] = None,
             require_admin: bool = False, admin_user_ids: Optional[set] = None,
             allow_permanent: bool = True, allow_session: bool = True, smart_denied: bool = False,
+            *, request_id: Optional[str] = None,
         ):
             super().__init__(allowed_user_ids, allowed_role_ids, timeout=_read_discord_prompt_timeout())
             self.session_key = session_key
+            self.request_id = request_id
             self.require_admin = require_admin
             self.admin_user_ids = {str(a).strip() for a in (admin_user_ids or set()) if str(a).strip()}
             self._localize_buttons(
@@ -6536,15 +6538,14 @@ def _define_discord_view_classes() -> None:
                 return
             label = t(label_key)
             self.resolved = True
-            # Unblock the waiting agent thread FIRST. A click after the approval
-            # wait timed out (count == 0) must not claim "Approved".
+            # Resolve before editing; an expired request must not claim "Approved".
             try:
                 from tools.approval import resolve_gateway_approval
-                count = resolve_gateway_approval(self.session_key, choice)
+                # Old or incomplete cards must never fall back to the session's FIFO head.
+                count = resolve_gateway_approval(self.session_key, choice, request_id=self.request_id) if self.request_id else 0
                 logger.info(
                     "Discord button resolved %d approval(s) for session %s (choice=%s, user=%s)",
-                    count, self.session_key, choice, interaction.user.display_name,
-                )
+                    count, self.session_key, choice, interaction.user.display_name)
             except Exception as exc:
                 logger.error("Failed to resolve gateway approval from button: %s", exc)
                 count = 0
@@ -6555,7 +6556,6 @@ def _define_discord_view_classes() -> None:
                 interaction, color,
                 t("platform.discord.approval.by_user", label=label, user=interaction.user.display_name) if count else label)
 
-        # Decorator labels are placeholders; ``_localize_buttons`` in __init__ sets the real text.
         @discord.ui.button(label="Allow Once", style=discord.ButtonStyle.green)
         async def allow_once(self, interaction: discord.Interaction, button: discord.ui.Button):
             await self._resolve(interaction, "once", discord.Color.green(), "platform.discord.approval.resolved_once")

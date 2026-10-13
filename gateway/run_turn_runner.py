@@ -1453,8 +1453,7 @@ class TurnRunner:
         return response, answered
 
     def _approval_notify_sync(self, approval_data: dict) -> None:
-        """Send the approval request from the agent thread: the adapter's interactive button
-        approvals (``send_exec_approval``) when available, else plain text with ``/approve`` steps."""
+        """Send native approval buttons, or the text /approve fallback, from the agent thread."""
         from gateway.run import _approval_send_outcome, _format_exec_approval_fallback, _interim_metadata, _redact_approval_command
         from gateway.run_turn_runner_approval_settle import register_timeout_notice
         ctx = self._ctx
@@ -1471,10 +1470,11 @@ class TurnRunner:
         # Check the *class*, not the instance — MagicMock auto-creates attributes in tests.
         if _renders_exec_approval_buttons(type(adapter)):
             try:
+                metadata = {**(ctx._status_thread_metadata or {}), "approval_request_id": approval_data.get("request_id")}
                 fut = self._schedule(
                     adapter.send_exec_approval(
                         chat_id=ctx._status_chat_id, command=cmd, session_key=ctx.session_key or "",
-                        description=desc, metadata=ctx._status_thread_metadata, **flags,
+                        description=desc, metadata=metadata, **flags,
                     ),
                     "send_exec_approval scheduling error",
                 )
