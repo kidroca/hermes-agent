@@ -1,5 +1,14 @@
 # Hermes Agent local patch catalogue
 
+## Local additions pending activation
+
+These entries are committed functional candidates in isolated worktrees, not claims
+of live deployment. The frozen active-stack receipt below remains unchanged.
+
+| Date | Patch ref | Title | Report | Upstream risk | Recommendation |
+|---|---|---|---|---|---|
+| 2026-10-14 | `2c44a104ebf618d8b9fb9fb865945a482a2cfd33` | Bind Discord approval buttons to exact queue requests | [Report](reports/2026-10-14-2c44a104eb-discord-exact-approval.md) | High exact overlap: #104960/#125039/#87554; #56487 adjacent callback work | Retain local candidate; 337 focused/adjacent tests passed with Python 3.11 compatibility-launcher limitation. Drop only after upstream proves stale/missing-ID fail-closed and preserved text FIFO/auth gates. Not pushed or activated. |
+
 ## Current active stack
 
 Authoritative for frozen functional candidate `d0b8381778` on upstream
