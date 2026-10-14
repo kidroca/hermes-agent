@@ -2,13 +2,15 @@
 
 ## October 14 additions prepared for fork publication
 
-These entries are integrated into `peter/hermes-patches` and approved for fork
-publication, not claims of live deployment. The frozen active-stack receipt below remains unchanged.
+These entries are prepared for `peter/hermes-patches`; each row states its
+integration/publication status. They are not claims of live deployment.
+The frozen active-stack receipt below remains unchanged.
 
 | Date | Patch ref | Title | Report | Upstream risk | Recommendation |
 |---|---|---|---|---|---|
 | 2026-10-14 | `21fbc45964` (original `2c44a104eb`) | Bind Discord approval buttons to exact queue requests | [Report](reports/2026-10-14-2c44a104eb-discord-exact-approval.md) | High exact overlap: #104960/#125039/#87554 remain open, unmerged and conflicting | Approved for publication; fresh 337 tests passed on Python 3.14.7 and independent review approved. Drop only after equivalent upstream behavior is proven; no live Discord validation claimed. |
 | 2026-10-14 | `94998ef764` (corrects `255404440a`) | Keep personal Hindsight routing out of the shared tree | [Report](reports/2026-10-14-hindsight-checkout-hygiene.md) | Low; root ignore rule only, no provider source change | Preserve local configuration; ignore `/.hindsight/` and never rely on a tracked personal bank for worktree inheritance. |
+| 2026-10-14 | `378d6c2106` | Pass implicit CLI workspaces to memory providers | [Report](reports/2026-10-14-378d6c2106-memory-cli-cwd.md) | High semantic init-helper overlap #105167; medium identity overlap #114452; complementary launch-cwd #136863 | Approved for integration/publication on `peter/hermes-patches`; 110 tests passed across 9 files and 5 settings-lookup smoke tests passed. Keep CLI-only fallback; live initialization/retention not claimed. |
 
 ## Current active stack
 
