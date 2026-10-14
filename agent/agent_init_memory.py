@@ -41,6 +41,11 @@ def _memory_provider_init_kwargs(agent, platform) -> dict[str, Any]:
             kwargs[_ident] = _val
     if agent.session_cwd:
         kwargs["cwd"] = agent.session_cwd
+    elif kwargs["platform"] == "cli":
+        # CLI/Kanban workspaces are implicit; gateways must not inherit the process cwd.
+        with suppress(Exception):
+            from agent.runtime_cwd import resolve_agent_cwd
+            kwargs["cwd"] = str(resolve_agent_cwd())
     # Profile identity for per-profile provider scoping
     with suppress(Exception):
         from hermes_cli.profiles import get_active_profile_name
