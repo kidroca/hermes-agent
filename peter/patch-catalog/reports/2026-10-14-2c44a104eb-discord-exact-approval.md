@@ -1,10 +1,10 @@
 # Bind Discord approval buttons to exact queue requests
 
 - Date: 2026-10-14 (Europe/Sofia); authenticated upstream snapshot taken just after local midnight.
-- Repo: `/home/kidroca/.hermes/cache/scratch/hermes-discord-exact-id`
-- Patch ref: `2c44a104ebf618d8b9fb9fb865945a482a2cfd33`
-- Branch: `peter/discord-exact-approval`
-- Local status: committed functional candidate on parent `255404440a02c73127b0e2f909a620d3c9cccc50`; catalogue pending parent review/commit. Not pushed or activated. `/opt/hermes-agent` is outside this task's write scope. Root `DISCORD-EXACT-ID-RESULT.md` is an existing private, untracked handoff, not catalogue content.
+- Repo: `kidroca/hermes-agent` (`/opt/hermes-agent`); publication preparation in an isolated worktree.
+- Patch ref: `21fbc45964e99d86f6dac9bef0efc56124b2cd5e`; original independently reviewed lineage `2c44a104ebf618d8b9fb9fb865945a482a2cfd33`.
+- Branch: `peter/hermes-patches`
+- Local status: integrated into Peter's patch stack. Peter explicitly approved fork publication on October 14, subject to fresh verification and removal of tracked personal Hindsight configuration. No restart or live Discord transport validation is claimed; the publication receipt is separate from runtime activation.
 - Motivation: an authorized operator clicking card B must not answer FIFO-oldest A; a stale A card must not answer later B. This is request-association integrity, not a newly claimed authorization bypass.
 - Changed files: `gateway/run_turn_runner.py`, `plugins/platforms/discord/adapter.py`, new `tests/gateway/test_discord_exec_approval_exact_id.py`, `tests/gateway/test_exec_approval_timeout_notice.py`. Actual commit: 4 files, 168 additions, 12 deletions.
 - Tests / verification: independent Codex review **APPROVE** in `/home/kidroca/.hermes/cache/scratch/proactive-discord-review-result.txt`. Parent canonical per-file runner receipt `/home/kidroca/.hermes/cache/scratch/proactive-discord-parent-check/renewed-final.log`: **337 passed, 14 files, 0 failed**, including 40 exact-ID tests and adjacent Telegram/Slack/Matrix/Feishu coverage. `parent-verification.json` records stable reviewed-source hashes, Ruff pass, health 0 blocking/0 advisory and diff-check pass. This catalogue pass inspected actual committed diff and independently ran `git diff --check`; it did not rerun tests. Python 3.11 used a documented typing/bootstrap compatibility launcher; preferred-interpreter validation and live Discord validation remain unperformed.
@@ -41,7 +41,7 @@ All rows below were refreshed with authenticated `gh`; ages are elapsed whole da
 
 ## Recommendation
 
-Retain this small, independently reviewed Discord-only candidate locally, pending the parent's catalogue review. Do not push, restart or activate as part of cataloguing. Upstream conflict risk is **high**, because several exact implementations touch the same runner/view contract, especially #104960 and #125039. Keep metadata and any future typed request-ID representation consistent; never leave a stale inherited ID or missing-ID FIFO fallback in a native button path.
+Publish this small, independently reviewed Discord-only patch to Peter's fork on `peter/hermes-patches` after the approved verification and checkout hygiene. Do not restart services as part of publication. Upstream conflict risk is **high**, because several exact implementations touch the same runner/view contract, especially #104960 and #125039. Keep metadata and any future typed request-ID representation consistent; never leave a stale inherited ID or missing-ID FIFO fallback in a native button path.
 
 At the next explicitly approved upstream update, inspect the actual landed implementation and rerun composed stale-A/live-B, reverse click order, all choices, duplicate/missing-ID and authorization regressions. Drop/supersede this local commit only after equivalent behavior is demonstrated. Track #104960/#125039/#87554 first; #56487 is acknowledgement work, not replacement evidence. No exhaustive repository-wide inventory, upstream mergeability simulation, full-suite result or live transport validation is claimed.
 
@@ -66,3 +66,20 @@ repo:NousResearch/hermes-agent is:pr is:merged author:happy5318
 ```
 
 The broad Discord-approval query returned 340 total matches with only the first 20 fetched; it was a bounded discovery aid, not exhaustive evidence. The focused request-ID query returned 11 matches and the view-name query 12, both fully enumerated with `incomplete_results=false`. No authentication/network blocker occurred.
+
+## October 14 publication verification and bounded upstream refresh
+
+The original 337-test Python 3.11 receipt above remains historical. Fresh parent verification used the canonical `scripts/run_tests.sh`, isolated HOME and the PM-provisioned Python 3.14.7 test environment: **337 passed, 0 failed across 14 files**, including 40 exact-ID regressions and adjacent Discord, Telegram, Slack, Matrix, Feishu and shared approval-queue tests. No compatibility launcher was needed. Pinned Ruff 0.15.10 passed for all four changed Python files; `scripts/check --only health --base ef3c7e1baa` reported **0 blocking, 0 advisory**. Diff checks passed. The all-checks invocation did not complete within 180 seconds; neither a full lint sweep nor the full test suite is claimed.
+
+A fresh independent read-only review approved functional commit `21fbc45964`. It confirmed authoritative metadata snapshots, missing/stale-ID fail-closed behavior, duplicate-click protection, unchanged admission/admin gates and preserved text FIFO. No source changes were required.
+
+Authenticated upstream refresh at **2026-10-14 12:58 UTC** (`gh api user`: `kidroca`) supersedes only the current-state/mergeability claims for these known items; other rows and author merged-PR counts remain the earlier snapshot:
+
+| Item | Current state | Review signal |
+|---|---|---|
+| #104960 | Open, unmerged; `mergeable=false`, `mergeable_state=dirty`; head `89311702f35e3f1dd6afbeb688c11f3c3c5be05d` | Five COMMENTED reviews by andrexibiza (NONE); no fetched maintainer approval |
+| #125039 | Open, unmerged; `mergeable=false`, `mergeable_state=dirty`; head `6748e47ebc556548e8a0ea607e8fa093ddf373f2` | Two COMMENTED reviews by andrexibiza (NONE); author-reported repairs, no maintainer approval |
+| #87554 | Open, unmerged; `mergeable=false`, `mergeable_state=dirty`; head `e143c011776c5c41231af48c34be2ccad50e1785` | Collaborator-authored; no formal reviews; authorship is not approval |
+| #104915 | Open; last updated `2026-09-27T07:11:11Z` | One corroborating non-maintainer comment; no maintainer acceptance |
+
+Personal `.hindsight/` routing is not part of this functional patch. Its accidentally tracked override is removed separately while preserving the local file and adding `/.hindsight/` to the root `.gitignore`.
