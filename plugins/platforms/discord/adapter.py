@@ -1246,6 +1246,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
 
     def __init__(self, config: PlatformConfig):
         super().__init__(config, Platform.DISCORD)
+        self._exec_approval_views: dict[tuple[str, str], Any] = {}
         self._client: Optional[commands.Bot] = None
         self._ready_event = asyncio.Event()
         self._allowed_user_ids: set = set()  # For button approval authorization
@@ -2152,6 +2153,9 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
     async def disconnect(self) -> None:
         """Disconnect from Discord."""
         self._disconnecting = True
+        for view in tuple(self._exec_approval_views.values()):
+            view.close_controls()
+        self._exec_approval_views.clear()
         # Cancel the liveness probe first so it can't fire a spurious fatal/reconnect mid-teardown.
         await self._cancel_liveness_task()
         # Leave voice *before* cancelling the bot task: VoiceClient.disconnect() needs the main
@@ -5696,6 +5700,7 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
 
     async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
         """Send an approval with content as its canonical payload and an embed for state."""
+        created = []
         def _build(_channel):
             content = prompt.text
             mention_content = self._approval_mention_content()
@@ -5714,6 +5719,11 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
                 admin_user_ids=admin_user_ids, allow_permanent="always" in choices,
                 allow_session="session" in choices, smart_denied=prompt.smart_denied,
             )
+            key = (view.session_key, view.request_id)
+            if view.request_id:
+                self._exec_approval_views[key] = view
+                view._detach = lambda: self._exec_approval_views.pop(key, None) if self._exec_approval_views.get(key) is view else None
+            created.append(view)
             send_kwargs: dict[str, Any] = {"content": content, "embed": embed, "view": view}
             if mention_content:
                 allowed_mentions_cls = getattr(discord, "AllowedMentions", None)
@@ -5722,7 +5732,26 @@ class DiscordAdapter(DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThread
                         users=True, roles=False, everyone=False, replied_user=False,
                     )
             return send_kwargs, view
-        return await self._send_prompt(prompt.chat_id, prompt.metadata, _build)
+        try:
+            result = await self._send_prompt(prompt.chat_id, prompt.metadata, _build)
+        except BaseException:
+            for view in created:
+                view.close_controls()
+            raise
+        for view in created:
+            if not result.success:
+                view.close_controls()
+            elif view.resolved:
+                await view._expire_embed(view._owner_footer or t("platform.discord.approval.outcome_unknown"))
+        return result
+
+    async def retire_exec_approval(self, session_key: str, request_id: str, reason: str) -> None:
+        """Retire only the adapter-owned exact request, without resolving any queue entry."""
+        view = self._exec_approval_views.get((session_key, request_id))
+        if view is not None:
+            await view.settle_from_owner(reason)
+
+
 
     async def send_slash_confirm(
         self, chat_id: str, title: str, message: str, session_key: str,
@@ -6430,7 +6459,12 @@ def _define_discord_view_classes() -> None:
             self._disable_all()
             await self._expire_embed(t("platform.discord.prompt.expired_footer"))
 
-    class ExecApprovalView(_HermesView):
+    if __package__:
+        from .adapter_exec_approval import ExecApprovalLifecycle
+    else:
+        from adapter_exec_approval import ExecApprovalLifecycle
+
+    class ExecApprovalView(ExecApprovalLifecycle, _HermesView):
         """Approval buttons bound to one gateway queue request."""
 
         def __init__(
@@ -6442,6 +6476,8 @@ def _define_discord_view_classes() -> None:
             super().__init__(allowed_user_ids, allowed_role_ids, timeout=_read_discord_prompt_timeout())
             self.session_key = session_key
             self.request_id = request_id
+            self._detach = None
+            self._owner_footer = None
             self.require_admin = require_admin
             self.admin_user_ids = {str(a).strip() for a in (admin_user_ids or set()) if str(a).strip()}
             self._localize_buttons(
@@ -6453,56 +6489,10 @@ def _define_discord_view_classes() -> None:
             elif not allow_permanent:
                 self.remove_item(self.allow_always)
 
-        def _check_auth(self, interaction: discord.Interaction) -> bool:
-            """Base admission always required; with ``require_admin`` the clicker must
-            also be an admin. Fails closed (logged once) when no admins are configured."""
-            if not super()._check_auth(interaction):
-                return False
-            if not self.require_admin:
-                return True
-            user = getattr(interaction, "user", None)
-            try:
-                uid = str(getattr(user, "id", "") or "")
-            except Exception:
-                uid = ""
-            if uid and uid in self.admin_user_ids:
-                return True
-            if not self.admin_user_ids:
-                logger.warning(
-                    "[Discord] require_admin_for_exec_approval is enabled but "
-                    "no admins are configured (allow_admin_from is empty) — "
-                    "exec approval buttons are disabled for everyone. Add "
-                    "admin user IDs under the discord platform's "
-                    "allow_admin_from, or disable the toggle."
-                )
-            return False
 
-        async def _resolve(self, interaction: discord.Interaction, choice: str, color: discord.Color, label_key: str):
-            """Resolve the approval via the gateway approval queue and update the embed."""
-            if not await self._gate(
-                interaction, resolved_msg=t("platform.discord.approval.already_resolved"),
-                unauth_msg=_unauthorized(),
-            ):
-                return
-            label = t(label_key)
-            self.resolved = True
-            # Resolve before editing; an expired request must not claim "Approved".
-            try:
-                from tools.approval import resolve_gateway_approval
-                # Old or incomplete cards must never fall back to the session's FIFO head.
-                count = resolve_gateway_approval(self.session_key, choice, request_id=self.request_id) if self.request_id else 0
-                logger.info(
-                    "Discord button resolved %d approval(s) for session %s (choice=%s, user=%s)",
-                    count, self.session_key, choice, interaction.user.display_name)
-            except Exception as exc:
-                logger.error("Failed to resolve gateway approval from button: %s", exc)
-                count = 0
-            if not count:
-                color = discord.Color.dark_grey()
-                label = t("platform.discord.approval.expired")
-            await self._finalize_embed(
-                interaction, color,
-                t("platform.discord.approval.by_user", label=label, user=interaction.user.display_name) if count else label)
+
+
+
 
         @discord.ui.button(label="Allow Once", style=discord.ButtonStyle.green)
         async def allow_once(self, interaction: discord.Interaction, button: discord.ui.Button):

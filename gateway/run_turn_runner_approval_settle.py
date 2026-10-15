@@ -1,12 +1,8 @@
-"""Tell the chat when an exec-approval prompt times out (messaging platforms).
+"""Host-owned approval settlement for messaging platforms.
 
-``tools.approval_gateway_wait._await_gateway_decision`` calls ``entry.settle(reason)`` once the
-wait ends. Only the TUI registered such a hook, so on Telegram / Slack / WhatsApp a card whose
-timer ran out kept live buttons and the user never learned the command did NOT run. The turn
-runner registers the hook here right after the prompt was delivered.
-
-Best-effort by design: a failed notice is logged at debug — the approval already resolved as
-"no", and nothing here may block the agent thread.
+Retire adapter-owned exact approval views on every outcome. Other adapters keep
+the existing timeout notice. Failed UI edits cannot change the host decision;
+a missing registration means unknown outcome, never inferred execution.
 """
 
 from __future__ import annotations
@@ -39,7 +35,15 @@ def register_timeout_notice(
         return
     timeout_s = approval_timeout_seconds()
 
+    adapter = getattr(runner._ctx, "_status_adapter", None)
+    retire = getattr(type(adapter), "retire_exec_approval", None)
+
     def settle(reason: str) -> None:
+        if retire is not None:
+            runner._schedule(
+                retire(adapter, session_key, request_id, reason),
+                "Approval retirement scheduling error")
+            return
         if reason != "timeout":
             return  # answered / interrupted / notify_failed already produced their own feedback
         # Same guard as every other late notice in TurnRunner: after /stop, /new or a restart the
@@ -51,7 +55,9 @@ def register_timeout_notice(
             _post_timeout_notice(runner._ctx, command, card_message_id, timeout_s),
             "Approval timeout notice scheduling error")
 
-    register_gateway_settle(session_key, request_id, settle)
+    registered = register_gateway_settle(session_key, request_id, settle)
+    if registered is False and retire is not None:
+        settle("unknown")
 
 
 async def _post_timeout_notice(ctx, command: str, card_message_id: Optional[str], timeout_s: int) -> None:
@@ -82,3 +88,24 @@ async def _edit_card(adapter, chat_id: str, message_id: str, content: str) -> bo
         logger.debug("Approval card edit failed; sending the notice as a new message", exc_info=True)
         return False
     return bool(getattr(result, "success", False))
+
+
+def register_after_ambiguous_send(runner, approval_data: dict, *, command: str, future) -> None:
+    """Late send acknowledgements retain owner scope and retire stale exact cards.
+
+    No second send, no inferred verdict when registration loses to settlement.
+    """
+    from contextvars import copy_context
+    scope = copy_context()
+
+    def delivered(done):
+        try:
+            result = done.result()
+        except Exception:
+            logger.debug("Ambiguous approval send did not complete", exc_info=True)
+            return
+        if getattr(result, "success", False):
+            scope.run(register_timeout_notice, runner, approval_data, command=command,
+                      card_message_id=getattr(result, "message_id", None))
+
+    future.add_done_callback(delivered)

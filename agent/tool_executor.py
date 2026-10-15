@@ -565,8 +565,10 @@ def _registered_tool_worker(agent):
     tid = threading.current_thread().ident
     with agent._tool_worker_threads_lock:
         agent._tool_worker_threads.add(tid)
+    from tools.approval_display import approval_display_scope
     try:
-        yield tid
+        with approval_display_scope(agent):
+            yield tid
     finally:
         with agent._tool_worker_threads_lock:
             agent._tool_worker_threads.discard(tid)

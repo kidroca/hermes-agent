@@ -791,3 +791,25 @@ Plugins that load after the adapters connected (install/enable from the CLI, Des
 - [ACP Internals](./acp-internals.md)
 - [Agent Loop Internals](./agent-loop.md)
 - [Messaging Gateway (User Guide)](../user-guide/messaging/index.md)
+
+## Approval display identity and peer settlement
+
+Pending approval snapshots may include optional `display_context` with public
+`session_id` (durable ID), `profile`, and `session_title`. The queue captures this
+snapshot at entry creation; its outer routing key and exact request UUID remain
+the authorization identity. Missing metadata is absent, never inferred from a
+routing key, command text, environment, or another pending request.
+
+`tools/approval_display.py` requires matching task-local approval/session IDs
+and routing scope. Profile labels require the explicitly bound runtime home;
+titles use only the owning tool worker’s exact-ID public title getter. Fields
+are bounded, reasoning-tag guarded and force-redacted before publication. No
+conversation, provider messages, system prompts or execution cwd are projected.
+
+The host retains the single settlement callback. Discord owns its exact
+`(session_key, request_id)` view map; `adapter_exec_approval.py` owns approval-only
+admission and retirement behavior. Retirement stops/disables/detaches controls
+before editing the owned message. Late send acknowledgements preserve owner
+scope and withdraw stale cards with an unknown outcome. Neither a local view
+timer nor missing registration proves a decision or command execution. Generic
+Discord prompts retain their existing timeout behavior.

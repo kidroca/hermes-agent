@@ -26,9 +26,13 @@ class _ApprovalEntry:
     """One pending dangerous-command approval inside a gateway session."""
     __slots__ = ("acknowledged", "cancelled", "data", "event", "expired", "reason", "result", "settle")
 
-    def __init__(self, data: dict):
+    def __init__(self, data: dict, *, session_key: str | None = None):
         self.event = threading.Event()
         self.data = dict(data)
+        self.data.pop("display_context", None)
+        from tools.approval_display import capture_display_context
+        if display := capture_display_context(session_key):
+            self.data["display_context"] = display
         self.data.setdefault("request_id", uuid.uuid4().hex)
         self.acknowledged = False
         # Surface hook run once when the wait ends by ANY path (answer, timeout, interrupt, /approve from
@@ -161,7 +165,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         "session_key": session_key, "surface": surface,
     }
     keys = list(approval_data.get("pattern_keys") or [])
-    entry = _ApprovalEntry(approval_data)
+    entry = _ApprovalEntry(approval_data, session_key=session_key)
 
     def _enqueue() -> None:
         register_prepared_approval(session_key, entry)
@@ -210,8 +214,10 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
             # ``request.cancel`` carries a RequestCancelReason: a choice committed from another surface is
             # ``resolved``; a withdrawn entry (woken with no choice — session torn down, turn ended, client
             # cannot answer) is ``session_closed``; never the raw poll-state token "set".
-            if state == "set":
-                reason = "resolved" if choice is not None else "session_closed"
+            if choice is not None and state != "interrupted":
+                reason = "resolved"
+            elif state == "set":
+                reason = "session_closed"
             else:
                 reason = state
             try:
@@ -226,7 +232,10 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         _ctx._fire_approval_hook("pre_approval_request", **payload)
         # Bridges sync agent thread → async gateway.
         try:
-            notify_cb(dict(entry.data))
+            notice = dict(entry.data)
+            if "display_context" in notice:
+                notice["display_context"] = dict(notice["display_context"])
+            notify_cb(notice)
             approval_published()
         except Exception as exc:
             logger.warning("Gateway approval notify failed: %s", exc)

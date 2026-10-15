@@ -90,7 +90,7 @@ def test_stale_card_cannot_answer_later_request(cards, monkeypatch, choice, sett
         runner._approval_notify_sync(dict(old.data))
         assert approval.resolve_gateway_approval(SESSION, "deny", request_id=old.data["request_id"]) == 1
     stale_view = sent[0]["view"]
-    assert stale_view.resolved is False
+    assert stale_view.resolved is (settlement == "expired")
     later = _enqueue("later")
     runner._approval_notify_sync(dict(later.data))
 
@@ -99,7 +99,11 @@ def test_stale_card_cannot_answer_later_request(cards, monkeypatch, choice, sett
     assert later.result is None
     assert not later.event.is_set()
     assert approval._gateway_queues[SESSION] == [later]
-    assert interaction.message.embeds[0].footer == t("platform.discord.approval.expired")
+    if settlement == "expired":
+        interaction.response.send_message.assert_awaited_once()
+        interaction.response.edit_message.assert_not_awaited()
+    else:
+        assert interaction.message.embeds[0].footer == t("platform.discord.approval.outcome_unknown")
 
 
 @pytest.mark.parametrize("choice", CHOICES)
@@ -132,7 +136,7 @@ def test_missing_or_unknown_card_id_fails_closed(cards, request_id, choice):
     metadata["approval_request_id"] = pending.data["request_id"]
     interaction = asyncio.run(_click(sent[0]["view"], choice))
     assert pending.result is None and not pending.event.is_set()
-    assert interaction.message.embeds[0].footer == t("platform.discord.approval.expired")
+    assert interaction.message.embeds[0].footer == t("platform.discord.approval.outcome_unknown")
 
 
 @pytest.mark.parametrize("choice", CHOICES)

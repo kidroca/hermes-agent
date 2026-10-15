@@ -689,7 +689,7 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
         """Send the approval request from the agent thread: the adapter's interactive button
         approvals (``send_exec_approval``) when available, else plain text with ``/approve`` steps."""
         from gateway.run import _approval_send_outcome, _format_exec_approval_fallback, _interim_metadata, _redact_approval_command
-        from gateway.run_turn_runner_approval_settle import register_timeout_notice
+        from gateway.run_turn_runner_approval_settle import register_after_ambiguous_send, register_timeout_notice
         ctx = self._ctx
         adapter = ctx._status_adapter
         # Slack's assistant_threads_setStatus disables the compose box, so the user can't type
@@ -723,9 +723,9 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
                         card_message_id=getattr(fut.result(timeout=0), "message_id", None))
                     return
                 if outcome == "ambiguous":
-                    # Timeout ≠ failure: the card may have posted with a late ack. The prompt
-                    # registration stays alive so a tap still resolves; re-sending made duplicate
-                    # cards + orphaned "/approve: nothing pending".
+                    register_timeout_notice(self, approval_data, command=cmd, card_message_id=None)
+                    register_after_ambiguous_send(self, dict(approval_data), command=cmd, future=fut)
+                    # The card may have posted with a late ack; re-sending would duplicate it.
                     logger.warning(
                         "Button-based approval send timed out — treating "
                         "as possibly-delivered (no re-send; the prompt "

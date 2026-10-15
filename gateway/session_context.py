@@ -185,6 +185,13 @@ def reset_session_vars() -> None:
     _runtime_cwd("clear_session_cwd")
 
 
+def get_bound_session_env(name: str) -> str:
+    """Read explicit task-local public identity only; never borrow process environment."""
+    var = _VAR_MAP.get(name)
+    value = var.get() if var is not None else _UNSET
+    return value if isinstance(value, str) else ""
+
+
 def get_session_env(name: str, default: str = "") -> str:
     """Read a session var by legacy ``HERMES_SESSION_*`` name; drop-in for os.getenv.  The
     ContextVar wins if ever set here (even to ``""``); else ``os.environ``; else *default*."""
