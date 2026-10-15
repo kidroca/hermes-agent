@@ -27,9 +27,13 @@ class _ApprovalEntry:
     __slots__ = ("acknowledged", "authority", "cancelled", "card_deny_only", "data", "event", "expired", "observers",
                  "reason", "result", "settle")
 
-    def __init__(self, data: dict):
+    def __init__(self, data: dict, *, session_key: str | None = None):
         self.event = threading.Event()
         self.data = dict(data)
+        self.data.pop("display_context", None)
+        from tools.approval_display import capture_display_context
+        if display := capture_display_context(session_key):
+            self.data["display_context"] = display
         self.data.setdefault("request_id", uuid.uuid4().hex)
         # True: a card tap may only deny until a renderer proves its card shows the whole command (#62359).
         self.card_deny_only = False
@@ -187,7 +191,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     keys = list(approval_data.get("pattern_keys") or [])
     # Born Deny-only: the mark exists before the entry is published, so no tap can approve it in the window
     # before its renderer has decided whether the card shows the whole command.
-    entry = _ApprovalEntry(approval_data)
+    entry = _ApprovalEntry(approval_data, session_key=session_key)
     entry.card_deny_only = True
     # Captured before the entry is published: a coalesced follower can find it while the pre-request
     # hooks still run, and must wait this same timeout rather than re-read a since-edited config.
@@ -261,7 +265,10 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         _ctx._fire_approval_hook("pre_approval_request", **payload)
         # Bridges sync agent thread → async gateway.
         try:
-            notify_cb(dict(entry.data))
+            notice = dict(entry.data)
+            if "display_context" in notice:
+                notice["display_context"] = dict(notice["display_context"])
+            notify_cb(notice)
             approval_published()
             # Bounded delivery trace (#138133): the notifier completed without raising, which is
             # the last record the wait side has of the prompt until it settles. Correlation only —

@@ -241,7 +241,9 @@ def withdraw_gateway_approval(session_key: str, request_id: str, cause: str) -> 
 def list_gateway_approvals(session_key: str) -> list[dict]:
     """Return replay-safe snapshots of unresolved approvals for one session."""
     with _lock:
-        return [dict(entry.data) for entry in _gateway_queues.get(session_key, [])]
+        return [{**entry.data, **({"display_context": dict(entry.data["display_context"])}
+                                if "display_context" in entry.data else {})}
+                for entry in _gateway_queues.get(session_key, [])]
 
 
 def list_gateway_approval_authority(session_key: str) -> list[dict]:

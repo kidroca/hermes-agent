@@ -121,9 +121,9 @@ def test_identical_requests_racing_to_lead_send_one_prompt(monkeypatch):
     class _BothBuildBeforeEitherEnqueues(wait_mod._ApprovalEntry):
         __slots__ = ()
 
-        def __init__(self, data):
+        def __init__(self, data, **kwargs):
             both_built.wait(10)
-            super().__init__(data)
+            super().__init__(data, **kwargs)
 
     real_follow = wait_mod._await_coalesced_leader
 
