@@ -1,9 +1,9 @@
-# Linux session ownership identity — integrated local-only patch
+# Linux session ownership identity — integrated patch and upstream draft
 
 ## Source and disposition
 
 - Approved source: `72cfc15381ea7312142833263b97b7c521cfeb83` (`fix(sessions): 🛠️ Keep Linux ownership stable across clock steps`). Parent: `410c7114c25e578698ad2357ccb3715de4a56f0d`.
-- Source and catalogue commits `72cfc15381` and `7743a9af63` were fast-forwarded from candidate branch `peter/ownership-clock-01` into `peter/hermes-patches` at Peter's explicit request. **Integrated into `/opt/hermes-agent`; not pushed, no upstream PR intended, no service restart or live acceptance performed.** No live configuration, services or leases were changed. New processes can read the updated source; existing processes are not claimed to have reloaded it.
+- Source and catalogue commits `72cfc15381` and `7743a9af63` were fast-forwarded from candidate branch `peter/ownership-clock-01` into `peter/hermes-patches` at Peter's explicit request. **Integrated into `/opt/hermes-agent`; personal branch not pushed, no service restart or live acceptance performed.** The initial local-only disposition was superseded by Peter's explicit approval to publish the isolated upstream-based draft below. No live configuration, services or leases were changed. New processes can read the updated source; existing processes are not claimed to have reloaded it.
 - Source delta: `hermes_cli/active_sessions.py` (+35/−1) and new `tests/hermes_cli/test_active_session_clock_identity.py` (179 lines): 214 additions, 1 deletion.
 
 ## Motivation and contract
@@ -32,7 +32,15 @@ Prior upstream glance supplied by the parent task found main `d87e7536e042` stil
 - [Fix PR #105720](https://github.com/NousResearch/hermes-agent/pull/105720), liuhao1024, September 8: open, unmerged, conflicting, no formal reviews in that snapshot.
 - Alternative #105722: closed, superseded.
 
-This implementation is inspired by the upstream work, **not a cherry-pick**. Semantic conflict risk is **high**: the same `active_sessions.py` identity hunks overlap. Keep this in Peter's local patch collection; no upstream PR preparation or publication is intended. Drop it only after an upstream equivalent contract and regression coverage are verified, not merely because a related PR merges.
+This implementation is inspired by the upstream work, **not a cherry-pick** of #105720. Semantic conflict risk is **high**: the same `active_sessions.py` identity hunks overlap. Retain it in Peter's patch collection until an upstream equivalent contract and regression coverage are verified, not merely because a related PR merges.
+
+## Approved upstream draft publication
+
+Peter subsequently requested an isolated fork branch and explicitly approved opening a draft PR. Source commit `72cfc15381` was cherry-picked onto upstream `024638739769a26171d631bb7a851499406e908d`, producing `b86d013e8fd393fc8c2bf09e4045111e6318ce71` on `kidroca/hermes-agent:fix/linux-session-clock-identity`. The public diff contains only the source file (+35/−1) and regression file (+179); no personal catalogue or other patch-stack changes.
+
+Draft PR: https://github.com/NousResearch/hermes-agent/pull/141952 . GitHub readback confirmed OPEN, draft, base `main`, exact head SHA and two-file scope; remote branch SHA equals local head. The body references #105714/#105720 and credits prior contributors, explicitly limits the fix to Linux, and documents legacy/non-rolling compatibility. Personal-stack branch publication and runtime activation remain separate.
+
+Fresh upstream-based verification with a PM-built environment from that branch's lockfile: **120 passed across 11 focused files**, retries disabled, and **all 12 repository checks passed**. The two core drift regressions failed against the upstream base and passed again after restoring the patch. Full suite and native macOS/Windows were not run. At initial PR readback no CI check results were posted; local results are not a claim of green GitHub CI.
 
 ## Separately authorized activation gate
 
