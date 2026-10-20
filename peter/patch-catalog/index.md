@@ -1,13 +1,13 @@
 # Hermes Agent local patch catalogue
 
-## October 20 local-only candidate (not integrated or active)
+## October 20 local-only addition (integrated; restart pending)
 
-This candidate is not part of the active stack or a publication/deployment receipt.
-Integration and activation require separate authorization; the frozen active table is unchanged.
+This addition is integrated into `peter/hermes-patches`, not published or runtime-verified.
+Activation requires separate authorization; the frozen active table is unchanged.
 
 | Date | Patch ref | Title | Report | Upstream risk | Recommendation |
 |---|---|---|---|---|---|
-| 2026-10-20 | `72cfc15381ea7312142833263b97b7c521cfeb83` | Keep Linux session ownership stable across clock steps | [Report](reports/2026-10-20-72cfc15381-linux-session-identity.md) | High semantic overlap in identity hunks: #105714 / open conflicting #105720; inspiration, not cherry-pick | Approved local-only candidate on `peter/ownership-clock-01`; NOT integrated in `peter/hermes-patches`, pushed or activated. Parent receipt: 122 tests / 11 files passed, independent review APPROVE. Not rolling-compatible: authorized idle-window drain/stop/integrate/restart/reacquire required; never delete live leases. Drop only after equivalent upstream contract is verified; live phone/voice/PWA/push acceptance deferred. |
+| 2026-10-20 | `72cfc15381ea7312142833263b97b7c521cfeb83` | Keep Linux session ownership stable across clock steps | [Report](reports/2026-10-20-72cfc15381-linux-session-identity.md) | High semantic overlap in identity hunks: #105714 / open conflicting #105720; inspiration, not cherry-pick | Integrated into `peter/hermes-patches`; personal/local-only, no upstream PR or push intended. 122 tests / 11 files passed in candidate and integrated checkout; independent review APPROVE. Restart and live acceptance pending. Not rolling-compatible: drain/stop old readers/restart/reacquire in an authorized idle window; never delete live leases. Drop only after equivalent upstream contract is verified. |
 
 ## October 14 additions prepared for fork publication
 
