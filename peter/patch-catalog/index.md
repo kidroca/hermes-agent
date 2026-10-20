@@ -1,13 +1,13 @@
 # Hermes Agent local patch catalogue
 
-## October 20 local-only addition (integrated; restart pending)
+## October 20 addition (integrated; upstream draft; restart pending)
 
-This addition is integrated into `peter/hermes-patches`, not published or runtime-verified.
+This addition is integrated into `peter/hermes-patches` and separately published as an upstream draft, not runtime-verified.
 Activation requires separate authorization; the frozen active table is unchanged.
 
 | Date | Patch ref | Title | Report | Upstream risk | Recommendation |
 |---|---|---|---|---|---|
-| 2026-10-20 | `72cfc15381ea7312142833263b97b7c521cfeb83` | Keep Linux session ownership stable across clock steps | [Report](reports/2026-10-20-72cfc15381-linux-session-identity.md) | High semantic overlap in identity hunks: #105714 / open conflicting #105720; inspiration, not cherry-pick | Integrated into `peter/hermes-patches`; personal/local-only, no upstream PR or push intended. 122 tests / 11 files passed in candidate and integrated checkout; independent review APPROVE. Restart and live acceptance pending. Not rolling-compatible: drain/stop old readers/restart/reacquire in an authorized idle window; never delete live leases. Drop only after equivalent upstream contract is verified. |
+| 2026-10-20 | `72cfc15381ea7312142833263b97b7c521cfeb83` | Keep Linux session ownership stable across clock steps | [Report](reports/2026-10-20-72cfc15381-linux-session-identity.md) | High semantic overlap in identity hunks: #105714 / open conflicting #105720; inspiration, not cherry-pick | Integrated into `peter/hermes-patches`; separately published as draft [#141952](https://github.com/NousResearch/hermes-agent/pull/141952), upstream-based source `b86d013e8f` (120 tests / 11 files and 12 checks passed). Personal-stack receipt: 122 tests / 11 files, independent review APPROVE. Personal branch not pushed; restart/live acceptance pending. Not rolling-compatible; drain/stop/restart/reacquire together, never delete live leases. Drop only after equivalent upstream contract is verified. |
 
 ## October 14 additions prepared for fork publication
 
