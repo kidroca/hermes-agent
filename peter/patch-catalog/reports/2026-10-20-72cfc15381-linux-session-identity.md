@@ -1,9 +1,9 @@
-# Linux session ownership identity — local-only candidate
+# Linux session ownership identity — integrated local-only patch
 
 ## Source and disposition
 
 - Approved source: `72cfc15381ea7312142833263b97b7c521cfeb83` (`fix(sessions): 🛠️ Keep Linux ownership stable across clock steps`). Parent: `410c7114c25e578698ad2357ccb3715de4a56f0d`.
-- Candidate branch: `peter/ownership-clock-01`. **Not integrated into `peter/hermes-patches`, not pushed, not activated.** This catalogue receipt is documentation only; source preparation is separate from integration and activation. No live configuration, services or leases changed.
+- Source and catalogue commits `72cfc15381` and `7743a9af63` were fast-forwarded from candidate branch `peter/ownership-clock-01` into `peter/hermes-patches` at Peter's explicit request. **Integrated into `/opt/hermes-agent`; not pushed, no upstream PR intended, no service restart or live acceptance performed.** No live configuration, services or leases were changed. New processes can read the updated source; existing processes are not claimed to have reloaded it.
 - Source delta: `hermes_cli/active_sessions.py` (+35/−1) and new `tests/hermes_cli/test_active_session_clock_identity.py` (179 lines): 214 additions, 1 deletion.
 
 ## Motivation and contract
@@ -16,7 +16,7 @@ Legacy numeric epoch entries and non-Linux behavior remain unchanged. Legacy lea
 
 ## Verification receipt
 
-Implementation verification supplied by the parent task (not rerun for this docs-only update):
+Parent-executed candidate verification, followed by the same focused run in the integrated `/opt/hermes-agent` checkout:
 
 - Canonical `scripts/run_tests.sh`, disposable HOME, retries disabled: **122 passed across 11 files, zero failures**. `HERMES_PYTHON=/home/kidroca/.hermes/cache/scratch/ownership-testenv-full/bin/python` (Python 3.14.7; PM-built dev/test/messaging environment).
 - Files: `tests/hermes_cli/{test_active_session_clock_identity,test_active_sessions,test_active_session_exclusivity}.py`; `tests/tools/test_bot_live_owner_delivery.py`; `tests/tui_gateway/{test_bot_live_owner_delivery,test_bot_relay_methods,test_retirement_admission,test_notification_turn_release}.py`; `tests/gateway/{test_host_rendezvous,test_peer_dm_into_open_bot_chat}.py`; `tests/cron/test_cron_live_bot_delivery.py`.
@@ -32,10 +32,10 @@ Prior upstream glance supplied by the parent task found main `d87e7536e042` stil
 - [Fix PR #105720](https://github.com/NousResearch/hermes-agent/pull/105720), liuhao1024, September 8: open, unmerged, conflicting, no formal reviews in that snapshot.
 - Alternative #105722: closed, superseded.
 
-This implementation is inspired by the upstream work, **not a cherry-pick**. Semantic conflict risk is **high**: the same `active_sessions.py` identity hunks overlap. Keep the candidate local; drop it only after an upstream equivalent contract and regression coverage are verified, not merely because a related PR merges.
+This implementation is inspired by the upstream work, **not a cherry-pick**. Semantic conflict risk is **high**: the same `active_sessions.py` identity hunks overlap. Keep this in Peter's local patch collection; no upstream PR preparation or publication is intended. Drop it only after an upstream equivalent contract and regression coverage are verified, not merely because a related PR merges.
 
 ## Separately authorized activation gate
 
-Activation requires an explicitly authorized idle window: drain active sessions; stop all old registry readers/writers sharing the registry, including CLI, TUI, serve and background bridges; integrate the candidate into the canonical checkout; restart relevant owners; reacquire fresh Linux leases. **Do not delete live leases.** Mixed old/new readers are not a safe rollout.
+Source integration is complete. Coordinated activation still requires an explicitly authorized idle window: drain active sessions; stop all old registry readers/writers sharing the registry, including CLI, TUI, serve and background bridges; restart relevant owners from the integrated checkout; reacquire fresh Linux leases. **Do not delete live leases.** Mixed old/new readers are not a safe rollout.
 
 Live end-to-end phone, voice, PWA and push acceptance remains reserved for the `proactive-hermes` follow-up. Neither those flows nor live activation are claimed by the unit/integration receipt above.
