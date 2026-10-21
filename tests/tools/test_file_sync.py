@@ -182,11 +182,11 @@ class TestTransactionalRollback:
         # First sync fails (swallowed, logged, state rolled back)
         mgr.sync(force=True)
 
-        # State should be empty (rolled back) — next sync retries all files
+        # The first file was acknowledged; only the failed and unattempted files retry.
         good_upload = MagicMock()
         mgr._upload_fn = good_upload
         mgr.sync(force=True)
-        assert good_upload.call_count == 3, "all files should be retried after rollback"
+        assert good_upload.call_count == 2, "confirmed uploads must not be retried"
 
     def test_delete_failure_rolls_back(self, tmp_files):
         upload = MagicMock()
