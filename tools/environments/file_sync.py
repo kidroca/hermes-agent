@@ -1,8 +1,8 @@
 """Shared file sync manager for remote execution backends.
 
-Tracks local file changes via mtime+size, detects deletions, and syncs to
-remote environments transactionally.  Used by SSH, Modal, and Daytona.
-Docker uses bind mounts (live host FS view) and doesn't need this.
+Tracks local file changes via metadata and confirmed content hashes, detects deletions,
+and checkpoints acknowledged transfers. Used by SSH, Modal, and Daytona.
+Docker and Singularity use bind mounts (live host FS view) and don't need this.
 """
 
 import hashlib
@@ -22,7 +22,7 @@ try:
 except ImportError:
     fcntl = None  # Windows — file locking skipped
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterator
 
 import psutil
 
@@ -190,8 +190,8 @@ def _sha256_file(path: str) -> str:
 
 class FileSyncManager:
     """Tracks local file changes and syncs to a remote environment. Backends supply transport
-    callbacks (upload, delete) and a file-source callable; the manager handles mtime-based
-    change detection, deletion tracking, rate limiting, and transactional state."""
+    callbacks (upload, delete) and a file-source callable; the manager handles change
+    detection, deletion tracking, rate limiting, and per-call confirmed state."""
 
     def __init__(
         self,
@@ -200,7 +200,14 @@ class FileSyncManager:
         delete_fn: DeleteFn,
         sync_interval: float = _SYNC_INTERVAL_SECONDS,
         bulk_upload_fn: BulkUploadFn | None = None,
-        bulk_download_fn: BulkDownloadFn | None = None):
+        bulk_download_fn: BulkDownloadFn | None = None,
+        upload_batch_max_files: int | None = None,
+        upload_batch_max_bytes: int | None = None):
+        for limit in (upload_batch_max_files, upload_batch_max_bytes):
+            if limit is not None and limit <= 0:
+                raise ValueError("sync batch limits must be positive")
+        self._batch_max_files = upload_batch_max_files
+        self._batch_max_bytes = upload_batch_max_bytes
         self._get_files_fn = get_files_fn
         self._upload_fn = upload_fn
         self._bulk_upload_fn = bulk_upload_fn
@@ -215,9 +222,9 @@ class FileSyncManager:
 
     def sync(self, *, force: bool = False) -> None:
         """Run a sync cycle: upload changed files, delete removed files. Rate-limited to once
-        per ``sync_interval`` unless *force* or ``HERMES_FORCE_FILE_SYNC=1``. Transactional:
-        state is committed only if ALL operations succeed; on failure it rolls back so the
-        next cycle retries everything."""
+        per ``sync_interval`` unless *force* or ``HERMES_FORCE_FILE_SYNC=1``. Each successful
+        transport call checkpoints in memory; failures leave only unconfirmed work to retry.
+        Other bulk backends retain their single-call behavior unless limits are supplied."""
         with self._transaction_lock:
             self._sync_transaction(force=force)
 
@@ -229,45 +236,71 @@ class FileSyncManager:
             and _monotonic() - self._last_sync_time < self._sync_interval):
             return
 
-        current_files = self._get_files_fn()
-        self._upload_only_host_paths.update(_credential_host_paths())
-        prev_files = dict(self._synced_files)
-        prev_hashes = dict(self._pushed_hashes)
         try:
+            current_files = self._get_files_fn()
+            self._upload_only_host_paths.update(_credential_host_paths())
             # Planning reads files too (content check against the pushed hash): a file removed
             # or unreadable after its stat fails the cycle here like a staging read, so the
             # caller's command still runs and the next cycle retries.
             to_upload, new_files, to_delete = self._plan_sync(current_files)
-
-            if not to_upload and not to_delete:
-                self._synced_files = new_files  # content-confirmed keys, nothing to push
-                self._last_sync_time = _monotonic()
-                return
-
-            # Hash and upload the same bytes: the original may be saved while
-            # the transport is reading it or waiting for remote acknowledgement.
-            with tempfile.TemporaryDirectory(prefix="hermes-sync-push-") as staging:
-                staged_files = []
-                pushed_hashes = {}
-                for index, (host_path, remote_path) in enumerate(to_upload):
-                    staged_path = os.path.join(staging, str(index))
-                    shutil.copy2(host_path, staged_path)
-                    pushed_hashes[remote_path] = _sha256_file(staged_path)
-                    staged_files.append((staged_path, remote_path))
-                self._push(staged_files, to_delete)
-            # Commit (all succeeded).
-            self._pushed_hashes.update(pushed_hashes)
-            for p in to_delete:
-                new_files.pop(p, None)
-                self._pushed_hashes.pop(p, None)
-            self._synced_files = new_files
+            # Keys whose bytes the remote already holds are confirmed without a transfer.
+            uploading = {remote for _, remote in to_upload}
+            self._synced_files.update(
+                {remote: key for remote, key in new_files.items() if remote not in uploading})
+            for batch in self._upload_batches(to_upload):
+                self._push_batch(batch, new_files)
+            # A transport acknowledges a whole delete call, not individual paths.
+            delete_limit = self._batch_max_files or len(to_delete) or 1
+            for start in range(0, len(to_delete), delete_limit):
+                batch = to_delete[start:start + delete_limit]
+                self._delete_fn(batch)
+                for remote_path in batch:
+                    self._synced_files.pop(remote_path, None)
+                    self._pushed_hashes.pop(remote_path, None)
             self._last_sync_time = _monotonic()
         except Exception as exc:
-            self._synced_files = prev_files
-            self._pushed_hashes = prev_hashes
-            # Do NOT advance _last_sync_time: bumping the rate-limit clock on failure would
-            # suppress the retry for up to _sync_interval, contradicting the retry contract.
-            logger.warning("file_sync: sync failed, rolled back state: %s", exc)
+            # Successful calls describe real remote progress. Keep their checkpoints,
+            # but do not rate-limit a retry of the unconfirmed remainder.
+            logger.warning("file_sync: sync failed, retaining confirmed progress: %s", exc, exc_info=True)
+
+    def _upload_batches(self, files: list[tuple[str, str]]) -> Iterator[list[tuple[str, str]]]:
+        """Bound staging and each acknowledged transport call; oversized files stand alone."""
+        batch = []
+        size = 0
+        file_limit = self._batch_max_files if self._bulk_upload_fn is not None else 1
+        for pair in files:
+            file_size = os.path.getsize(pair[0])
+            if batch and (
+                (file_limit is not None and len(batch) >= file_limit)
+                or (self._batch_max_bytes is not None and size + file_size > self._batch_max_bytes)
+            ):
+                yield batch
+                batch = []
+                size = 0
+            batch.append(pair)
+            size += file_size
+        if batch:
+            yield batch
+
+    def _push_batch(
+        self, files: list[tuple[str, str]], planned_keys: dict[str, tuple[int, int, int, int]],
+    ) -> None:
+        """Checkpoint only confirmed bytes, never a live source read after acknowledgement."""
+        with tempfile.TemporaryDirectory(prefix="hermes-sync-push-") as staging:
+            staged_files = []
+            hashes = {}
+            for index, (host_path, remote_path) in enumerate(files):
+                staged_path = os.path.join(staging, str(index))
+                shutil.copy2(host_path, staged_path)
+                hashes[remote_path] = _sha256_file(staged_path)
+                staged_files.append((staged_path, remote_path))
+            if self._bulk_upload_fn is not None:
+                self._bulk_upload_fn(staged_files)
+            else:
+                for host_path, remote_path in staged_files:
+                    self._upload_fn(host_path, remote_path)
+            self._pushed_hashes.update(hashes)
+            self._synced_files.update({remote: planned_keys[remote] for _, remote in files})
 
     def _plan_sync(
         self, current_files: list[tuple[str, str]]
@@ -291,23 +324,6 @@ class FileSyncManager:
         current_remote_paths = {remote for _, remote in current_files}
         to_delete = [p for p in self._synced_files if p not in current_remote_paths]
         return to_upload, new_files, to_delete
-
-    def _push(self, to_upload: list[tuple[str, str]], to_delete: list[str]) -> None:
-        """Run the transport calls for one cycle (bulk upload when available)."""
-        if to_upload:
-            logger.debug("file_sync: uploading %d file(s)", len(to_upload))
-        if to_delete:
-            logger.debug("file_sync: deleting %d stale remote file(s)", len(to_delete))
-        if to_upload and self._bulk_upload_fn is not None:
-            self._bulk_upload_fn(to_upload)
-            logger.debug("file_sync: bulk-uploaded %d file(s)", len(to_upload))
-        else:
-            for host_path, remote_path in to_upload:
-                self._upload_fn(host_path, remote_path)
-                logger.debug("file_sync: uploaded %s -> %s", host_path, remote_path)
-        if to_delete:
-            self._delete_fn(to_delete)
-            logger.debug("file_sync: deleted %s", to_delete)
 
     # --- Sync-back: pull remote changes to host on teardown ---
     def sync_back(self, hermes_home: Path | None = None) -> None:
@@ -457,6 +473,7 @@ class FileSyncManager:
             return 0  # unchanged from push
 
         host_path = self._resolve_host_path(remote_path, file_mapping)
+        mapped_host = host_path is not None
         if host_path is None:
             host_path = self._infer_host_path(remote_path, file_mapping, upload_only_host_paths=upload_only_host_paths)
             if host_path is None:
@@ -465,6 +482,13 @@ class FileSyncManager:
 
         if self._is_upload_only_host_path(host_path, upload_only_host_paths):
             logger.debug("sync_back: skipping upload-only credential file %s", remote_path)
+            return 0
+
+        # Without a confirmed push, remote content may predate a failed upload.
+        # Only genuinely new remote files may be imported without that baseline;
+        # explicit mappings remain host-owned even if the host file disappeared.
+        if pushed_hash is None and (mapped_host or os.path.lexists(host_path)):
+            logger.debug("sync_back: skipping %s (no confirmed push for host target)", remote_path)
             return 0
 
         if pushed_hash is not None and os.path.exists(host_path) and _sha256_file(host_path) != pushed_hash:
