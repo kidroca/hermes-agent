@@ -127,7 +127,8 @@ class SSHEnvironment(BaseEnvironment):
             self._sync_manager = FileSyncManager(
                 get_files_fn=lambda: iter_sync_files(f"{self._remote_home}/.hermes"),
                 upload_fn=self._scp_upload, delete_fn=self._ssh_delete,
-                bulk_upload_fn=self._ssh_bulk_upload, bulk_download_fn=self._ssh_bulk_download)
+                bulk_upload_fn=self._ssh_bulk_upload, bulk_download_fn=self._ssh_bulk_download,
+                upload_batch_max_files=256, upload_batch_max_bytes=16 * 1024 * 1024)
             self._sync_manager.sync(force=True)
         self.init_session()
 
@@ -229,6 +230,7 @@ class SSHEnvironment(BaseEnvironment):
             relative = _remote_sync_relative_path(remote_path, base)
             validated_files.append((host_path, posixpath.join(base, relative), relative))
 
+        upload_bytes = sum(os.path.getsize(host) for host, _ in files)
         # Symlink staging avoids fragile GNU tar --transform rules. Archive
         # only explicit file entries instead of the staging root, otherwise
         # remote tar sees parent directory headers like `.` and may fail while
@@ -300,7 +302,10 @@ class SSHEnvironment(BaseEnvironment):
                 raise
             tar_proc.stdout.close()  # let tar_proc receive SIGPIPE if ssh_proc exits early
             try:
-                _, ssh_stderr = ssh_proc.communicate(timeout=120)
+                # Normal batches are small; a single oversized file cannot be split
+                # by the manifest. Budget 256 KiB/s plus connection/extraction overhead
+                # rather than retrying that file forever under a fixed 120 s deadline.
+                _, ssh_stderr = ssh_proc.communicate(timeout=120 + upload_bytes / (256 * 1024))
                 # communicate() (not wait()) drains stderr so tar can't deadlock on >PIPE_BUF errors.
                 if tar_proc.poll() is None:
                     _, tar_stderr_raw = tar_proc.communicate(timeout=10)
