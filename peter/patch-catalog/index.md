@@ -1,5 +1,14 @@
 # Hermes Agent local patch catalogue
 
+## October 22 addition (integrated locally; restart pending)
+
+Source is integrated into `peter/hermes-patches`, not activated in existing processes.
+Personal/local-only; no push or upstream publication requested. Frozen active table unchanged.
+
+| Date | Patch ref | Title | Report | Upstream risk | Recommendation |
+|---|---|---|---|---|---|
+| 2026-10-22 | `7afc5e3adb6d357257ca1a1a95118986e01697e9` | Retain acknowledged SSH sync progress across retries | [Report](reports/2026-10-22-ssh-sync-progress.md) | High direct overlap with open #139385 (credited prior art); adjacent #131146/#96935; merge likelihood unknown | Integrated locally; 143 passed / 0 failed / 15 skipped across 12 files, final independent APPROVED. Parent macOS live upload/readback: 1,527 files, zero mismatches; predates final sync-back guard (4 RED→GREEN regressions). Preserve portable tar; in-memory call-level checkpoints only. Restart separately authorized; no push/publication. |
+
 ## October 20 addition (integrated; upstream draft; restart pending)
 
 This addition is integrated into `peter/hermes-patches` and separately published as an upstream draft, not runtime-verified.
