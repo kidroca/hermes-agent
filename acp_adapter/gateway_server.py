@@ -9,9 +9,10 @@ import uuid
 
 import acp
 from acp.schema import (
-    AgentCapabilities, Implementation, InitializeResponse, LoadSessionResponse,
+    AgentCapabilities, CloseSessionResponse, Implementation, InitializeResponse, LoadSessionResponse,
     NewSessionResponse, PromptCapabilities, PromptResponse, ResumeSessionResponse,
-    SessionCapabilities, SessionForkCapabilities, SessionListCapabilities, SessionResumeCapabilities,
+    SessionCapabilities, SessionCloseCapabilities, SessionForkCapabilities, SessionListCapabilities,
+    SessionResumeCapabilities,
 )
 
 from hermes_cli.gateway_client import GatewayClientError, connect_gateway
@@ -20,6 +21,7 @@ from acp_adapter.gateway_reply import GatewayReplyMixin, _text
 from acp_adapter.session import _translate_acp_cwd, _normalize_cwd_for_compare
 
 logger = logging.getLogger(__name__)
+_CLOSE_DRAIN_TIMEOUT_S = 30.0
 
 
 def _slash_command(text):
@@ -143,7 +145,8 @@ class GatewayACPAgent(GatewayReplyMixin, acp.Agent):
             agent_capabilities=AgentCapabilities(load_session=True,
                 prompt_capabilities=PromptCapabilities(image=True),
                 session_capabilities=SessionCapabilities(fork=SessionForkCapabilities(), list=SessionListCapabilities(),
-                                                         resume=SessionResumeCapabilities())),
+                                                         resume=SessionResumeCapabilities(),
+                                                         close=SessionCloseCapabilities())),
             auth_methods=build_auth_methods())
 
     async def authenticate(self, method_id, **kwargs):
@@ -411,6 +414,45 @@ class GatewayACPAgent(GatewayReplyMixin, acp.Agent):
     async def resume_session(self, cwd, session_id, mcp_servers=None, **kwargs):
         return ResumeSessionResponse(**await self._resume(cwd, session_id, mcp_servers))
 
+    async def close_session(self, session_id, **kwargs):
+        """Detach this editor from one session, as a disconnect does for all of them: the owner ends
+        an idle ACP session once its last viewer leaves (``gateway/session_acp_lifecycle.py``), history
+        stays, and ``session/load`` reopens it. This editor's own running prompt is cancelled first;
+        other surfaces' turns are theirs."""
+        from hermes_cli.gateway_client import GatewayRPCError
+        session_id = self._aliases.get(session_id, session_id)
+        if session_id in self._snapshots and self._editor_busy(session_id):
+            # Close cancels like the in-process adapter did; prompt waiters still read the snapshot.
+            await self.cancel(session_id)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + _CLOSE_DRAIN_TIMEOUT_S
+            while self._editor_busy(session_id):
+                if loop.time() >= deadline:
+                    raise GatewayClientError("close_busy")
+                await asyncio.sleep(0.05)
+        try:
+            # Any reconnect re-attach finishes first, so the subscription detached below is current.
+            client = await self._client()
+        except GatewayClientError:
+            client = None
+        async with self._changed:
+            snapshot = self._snapshots.pop(session_id, None)
+            self._editor_mcp.pop(session_id, None)
+            self._changed.notify_all()
+        for key in [key for key in self._permissions if key[0] == session_id]:
+            self._permissions.pop(key).cancel()
+        if snapshot is None or client is None:
+            return CloseSessionResponse()
+        try:
+            await client.rpc("session.detach", session_id=session_id, subscription_id=snapshot["subscription_id"])
+        except (GatewayRPCError, GatewayClientError):
+            # Boundary: a subscription the owner already dropped (restart, lost transport) is closed.
+            logger.info("ACP session %s detach not acknowledged", session_id, exc_info=True)
+        return CloseSessionResponse()
+
+    def _editor_busy(self, session_id):
+        return session_id in self._submitting or any(held == session_id for held, _ in self._inflight)
+
     async def _cancel_admission(self, session_id, admission_id):
         client = await self._client()
         # Cancel our own admission; another surface's running turn is not ours to
@@ -640,6 +682,8 @@ class GatewayACPAgent(GatewayReplyMixin, acp.Agent):
         if answered:
             return PromptResponse(stop_reason='end_turn')
         # ... and every prepared control's (a slash keeps its own key: apply retires the rest).
+        if session_id not in self._snapshots:
+            raise GatewayClientError("not_found")  # closed while the slash command ran
         self._mutations.retire(session_id)
         submit = {'text': text}
         if attachments:
@@ -786,6 +830,8 @@ class GatewayACPAgent(GatewayReplyMixin, acp.Agent):
         """Queued: it lost nothing. Running: cut until its live completion. Unknown: the waiter refuses it.
         Unlisted: it ended in the hole and its receipt settles it (unreadable: that prompt alone fails).
         Terminal evidence received, being delivered or already delivered always wins."""
+        if session_id not in self._snapshots:
+            return  # closed after its waiter settled
         from hermes_cli.gateway_replay_gap import pending_status, settled
         status = pending_status(self._snapshots[session_id].get("pending"), admission_id)
         if status in ("queued", "unknown") or {admission_id} & (
