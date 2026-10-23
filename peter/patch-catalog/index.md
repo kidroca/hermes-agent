@@ -1,6 +1,30 @@
 # Hermes Agent local patch catalogue
 
-## October 22 addition (integrated locally; restart pending)
+## Current active stack
+
+Authoritative for candidate `update/hermes-patches-20261023T185053Z` on upstream
+`f3b5b980d6158794beb3d1044fd7b8ca4b8f0b23`. Only this table has active core patch claims.
+Published to the fork only by explicit lease from `b0f57c4e71`; live installation is a separate step. See the
+[October 23 reconciliation](reports/2026-10-23-upstream-reconciliation.md) for lineage, decisions, verification and limitations.
+All later sections are historical.
+
+| Date | Patch ref | Title | Report | Recommendation |
+|---|---|---|---|---|
+| 2026-10-23 | `09569c8c85` + `a1203b14d2` + `73a84f541c` + `8560536e20` + `5bf03f258b` → `ab77b1b0fe` + `6bef9fec10` + `625eedc9b1` + `872c5efd90` + `7ee1e480b7` | Portable file-only SSH uploads | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained; `writelines` lint fix folded into the owner. |
+| 2026-10-23 | `cb13b13673` + `dfe271189a` + `d5b03ba057` → `3debae964c` + `1155511c27` + `ada56f5856` | On-demand configured CDP launch | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Adapted onto `tools/browser_session_cdp.py` after upstream deleted `browser_tool_cdp.py`; env launch overrides retired (profile scope). |
+| 2026-10-23 | `0b42ce86dd` → `0988d57974` | TUI missing session database handle recovery | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained; path still live under the unified runtime. |
+| 2026-10-23 | `47b433357f` + `6fa1948ec7` + `13eda3a05e` + `19e407ef29` → `559160ee29` + `1b64304918` + `838e2a0de8` + `f7044c220b` | External-CDP activity leases | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Adapted: split carries upstream routing state; endpoint read is profile-scoped (`get_cdp_override_raw`). |
+| 2026-10-23 | `bec721897b` → `1ce79b79cb` | Canonical ancestry advisory | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained unchanged. |
+| 2026-10-23 | `8fa25cabad` + `c1d013b116` → `b656e03cfb` + `3f31c1730d` | Generic external-memory structured notice bridge | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Composed with upstream `initialize_for_agent`; extracted helpers equal upstream plus callbacks. |
+| 2026-10-23 | `3ec89c64a8` → `eb94493bc5` | Doctor retirement docs | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained. |
+| 2026-10-23 | `255404440a` + `94998ef764` → `e6c99cea50` + `509b3ae339` | Hindsight project bank identity and checkout hygiene | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained. |
+| 2026-10-23 | `21fbc45964` + `977d4a420c` → `6ed0e4bbcd` + `8ac370a23e` | Discord exact-request approvals and settled-peer retirement | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained; upstream Discord still lacks request binding and retirement. |
+| 2026-10-23 | `378d6c2106` → `bd1700f5db` | Implicit CLI workspace for memory providers | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained; gateway turns resolve the bound session cwd. |
+| 2026-10-23 | `72cfc15381` → `8be151aa45` | Linux session ownership across clock steps | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Retained unchanged. |
+| 2026-10-23 | `7afc5e3adb` → `b7bef45e35` | Acknowledged SSH sync progress | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Adapted: local batching/checkpoints kept, upstream `_plan_sync` content confirmation adopted. |
+| 2026-10-23 | `3b3a308c24` + `9bfa349f24` + `fc63477679` + `91a85444cf` + `1a89ad0e21` + `d0b8381778` → `dd2f9a04c7` | ACP explicit close | [Reconciliation](reports/2026-10-23-upstream-reconciliation.md) | Old in-process family dropped (dead path under gateway ACP); replaced by gateway `session/close` detach. |
+
+## Historical October 22 addition (now in the October 23 active table)
 
 Source is integrated into `peter/hermes-patches`, not activated in existing processes.
 Personal/local-only; no push or upstream publication requested. Frozen active table unchanged.
@@ -9,7 +33,7 @@ Personal/local-only; no push or upstream publication requested. Frozen active ta
 |---|---|---|---|---|---|
 | 2026-10-22 | `7afc5e3adb6d357257ca1a1a95118986e01697e9` | Retain acknowledged SSH sync progress across retries | [Report](reports/2026-10-22-ssh-sync-progress.md) | High direct overlap with open #139385 (credited prior art); adjacent #131146/#96935; merge likelihood unknown | Integrated locally; 143 passed / 0 failed / 15 skipped across 12 files, final independent APPROVED. Parent macOS live upload/readback: 1,527 files, zero mismatches; predates final sync-back guard (4 RED→GREEN regressions). Preserve portable tar; in-memory call-level checkpoints only. Restart separately authorized; no push/publication. |
 
-## October 20 addition (integrated; upstream draft; restart pending)
+## Historical October 20 addition (now in the October 23 active table)
 
 This addition is integrated into `peter/hermes-patches` and separately published as an upstream draft, not runtime-verified.
 Activation requires separate authorization; the frozen active table is unchanged.
@@ -18,7 +42,7 @@ Activation requires separate authorization; the frozen active table is unchanged
 |---|---|---|---|---|---|
 | 2026-10-20 | `72cfc15381ea7312142833263b97b7c521cfeb83` | Keep Linux session ownership stable across clock steps | [Report](reports/2026-10-20-72cfc15381-linux-session-identity.md) | High semantic overlap in identity hunks: #105714 / open conflicting #105720; inspiration, not cherry-pick | Integrated into `peter/hermes-patches`; separately published as draft [#141952](https://github.com/NousResearch/hermes-agent/pull/141952), upstream-based source `b86d013e8f` (120 tests / 11 files and 12 checks passed). Personal-stack receipt: 122 tests / 11 files, independent review APPROVE. Personal branch not pushed; restart/live acceptance pending. Not rolling-compatible; drain/stop/restart/reacquire together, never delete live leases. Drop only after equivalent upstream contract is verified. |
 
-## October 14 additions prepared for fork publication
+## Historical October 14 additions (now in the October 23 active table)
 
 These entries are prepared for `peter/hermes-patches`; each row states its
 integration/publication status. They are not claims of live deployment.
@@ -31,7 +55,7 @@ The frozen active-stack receipt below remains unchanged.
 | 2026-10-14 | `94998ef764` (corrects `255404440a`) | Keep personal Hindsight routing out of the shared tree | [Report](reports/2026-10-14-hindsight-checkout-hygiene.md) | Low; root ignore rule only, no provider source change | Preserve local configuration; ignore `/.hindsight/` and never rely on a tracked personal bank for worktree inheritance. |
 | 2026-10-14 | `378d6c2106` | Pass implicit CLI workspaces to memory providers | [Report](reports/2026-10-14-378d6c2106-memory-cli-cwd.md) | High semantic init-helper overlap #105167; medium identity overlap #114452; complementary launch-cwd #136863 | Approved for integration/publication on `peter/hermes-patches`; 110 tests passed across 9 files and 5 settings-lookup smoke tests passed. Keep CLI-only fallback; live initialization/retention not claimed. |
 
-## Current active stack
+## Historical October 9 active-table snapshot
 
 Authoritative for frozen functional candidate `d0b8381778` on upstream
 `8bff64d6ed3414a66976bfa8ab72c14b6bca2a6f`. Only this table has active core patch claims.
