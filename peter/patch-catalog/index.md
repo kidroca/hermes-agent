@@ -1,5 +1,14 @@
 # Hermes Agent local patch catalogue
 
+## Prepared October 27 candidate (not active)
+
+Canonical `peter/hermes-patches` remains at `436fc0c130`. This candidate is retained
+only on its isolated branch; integration and runtime activation are separate.
+
+| Date | Source ref | Title | Report | Status |
+|---|---|---|---|---|
+| 2026-10-27 | `adbe42a737` | Shared cron delivery for satellites with local sessions | [Report](reports/2026-10-27-adbe42a737-satellite-cron-shared-delivery.md) | `peter/cron-shared-delivery-candidate`; 147 tests / 12 checks passed; independent exact-commit review: no blockers. NOT loaded, deployed, pushed, or published. |
+
 ## Current active stack
 
 Authoritative for candidate `update/hermes-patches-20261023T185053Z` on upstream
