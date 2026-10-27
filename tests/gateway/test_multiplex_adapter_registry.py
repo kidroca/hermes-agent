@@ -697,6 +697,29 @@ class TestSecondaryStartupFailureRecovery:
 class TestSecondaryProfileConfigHandling:
     """Secondary config errors degrade only when the profile is safe to skip."""
 
+    @pytest.mark.asyncio
+    async def test_failed_connect_retains_bot_ownership_before_reconnect(self, tmp_path, monkeypatch):
+        """A failed bot must not turn a LOCAL-only profile into a shared-bot satellite."""
+        from cron.scheduler_preflight import has_credential_platform
+
+        runner = _secondary_recovery_runner()
+        adapter = _SecondaryRecoveryAdapter()
+        config = GatewayConfig(platforms={
+            Platform.DISCORD: PlatformConfig(enabled=True, token="synthetic-token")})
+        monkeypatch.setattr(runner, "_load_secondary_profile_config", AsyncMock(return_value=config))
+        monkeypatch.setattr(runner, "_create_adapter", lambda *a: adapter)
+        monkeypatch.setattr(runner, "_configure_profile_adapter", lambda *a: None)
+
+        async def fail_connect(*args):
+            assert has_credential_platform({}, runner._profile_bot_platforms["satellite"])
+            return False
+
+        monkeypatch.setattr(runner, "_connect_initial_adapter_with_timeout", fail_connect)
+        monkeypatch.setattr(runner, "_schedule_secondary_profile_startup_reconnect", lambda *a: None)
+        assert await runner._start_one_profile_adapters("satellite", tmp_path, {}) == 0
+        assert has_credential_platform(
+            {Platform.LOCAL: object()}, runner._profile_bot_platforms["satellite"])
+
 
     @pytest.mark.asyncio
     async def test_secondary_port_binders_run_in_shared_listener_mode(self, monkeypatch):

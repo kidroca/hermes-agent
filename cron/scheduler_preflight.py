@@ -233,6 +233,12 @@ class SharedRouteAdapters:
         return default
 
 
+def has_credential_platform(adapters, owned=None) -> bool:
+    """LOCAL sessions hold no bot credential; a disconnected owned bot still does."""
+    return bool(owned) or any(
+        getattr(platform, "value", platform) != "local" for platform in adapters or ())
+
+
 def _preflight_check_delivery(job: dict) -> Optional[str]:
     """Check delivery targets resolve to configured platforms. ``local``/``origin``/``all`` are
     never checked (no gateway-config load). Unknown platform always blocks; known platform blocks
