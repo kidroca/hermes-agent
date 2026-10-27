@@ -3,12 +3,12 @@
 Date: 2026-10-27. Source: `adbe42a737e8b8aac7701b4d826b3a5e44b60e8b`.
 Base: `436fc0c13056dd44979c17413cee3552ff5b9a15`.
 Branch: `peter/cron-shared-delivery-candidate`.
-Worktree: `/tmp/hermes-cron-shared-delivery`.
+Candidate worktree removed after integration; the candidate branch remains available.
 
-Prepared/tested local candidate only. Canonical `/opt/hermes-agent` remains clean
-on `peter/hermes-patches` at the base. NOT deployed, loaded into the running
-gateway, pushed, or published. Author and committer: `🤖 Codex`, retaining the
-configured Git email.
+Integrated into canonical `/opt/hermes-agent` on `peter/hermes-patches` by an
+authorized fast-forward to `b7a5731dd2`. Runtime activation receipt follows below.
+No push or publication is authorized. Author and committer: `🤖 Codex`, retaining
+the configured Git email.
 
 ## Root cause
 
@@ -78,9 +78,10 @@ credentials and adapters were used. Test files:
 - `tests/cron/test_cron_multiplex_shared_route_delivery.py`
 - `tests/cron/test_restart_safe_worker.py`
 
-Invocation: `HOME=/tmp/hermes-cron-test-home
-HERMES_HOME=/tmp/hermes-cron-test-home/hermes
-HERMES_RUNTIME_DIR=/tmp/hermes-cron-test-runtime
+Invocation pattern, with disposable scratch directories assigned to `test_home`
+and `test_runtime`: `HOME="$test_home"
+HERMES_HOME="$test_home/hermes"
+HERMES_RUNTIME_DIR="$test_runtime"
 HERMES_PYTHON=/opt/hermes-agent/.venv/bin/python bash scripts/run_tests.sh
 <the nine files above> -j 2 --file-retries 0`.
 
@@ -116,12 +117,44 @@ contains the stronger ownership-aware implementation. Direct rebase overlap is
 likely in the seven touched source files. Drop this candidate when the maintained
 base includes equivalent upstream behavior and the authorization tests pass.
 
-## Separate activation proposal — not executed
+## Approved integration and activation
 
-After Peter approves: integrate the reviewed source commit into the maintained
-patch branch, verify the integrated tree, and arrange a coordinated gateway
-activation. Then, under separate approval for the live send and temporary job
-state, use a dedicated no-agent canary with a unique marker at the authorized
-satellite destination; inspect its execution/delivery outcome and confirm only
-one message. Do not rerun the existing production job. No step in this proposal
-has been executed or authorized by the source-preparation task.
+Peter separately authorized integration and gateway restart through the Windows
+WSL root path. The root identity probe succeeded for distro Ubuntu. The command
+runner belongs to `/init.scope`, outside the target service's cgroup
+`/system.slice/hermes-gateway.service`.
+
+Canonical `peter/hermes-patches` fast-forwarded to `b7a5731dd2` without changing
+the reviewed production/test blobs. Fresh integrated-checkout verification:
+147 passed / nine files; all 12 checks passed with `scripts/check --staged`.
+The working-directory check also found unrelated ignored desktop packager
+archives; they were left untouched. Literal temporary paths in this report were
+replaced with a scratch-directory invocation pattern before the staged check.
+
+Installed `ExecReload=/bin/kill -USR1 $MAINPID` and `Restart=always` were verified.
+At 2026-10-27 15:00:28 UTC, the approved WSL root path invoked
+`systemctl reload hermes-gateway.service`. In Hermes this requests a graceful
+restart, not an in-process reload: drain active work, exit, then systemd relaunch.
+The old PID 1670425 entered draining and waited for an existing chat turn; no
+force-kill, production-job rerun, or live delivery canary was requested.
+
+The chat completed naturally. At 15:09:56 UTC Hermes logged the after-turn wait
+complete with zero active work. Shutdown emitted its configured built-in home
+channel notifications; no custom/test messages were sent. Idle-cache cleanup
+exceeded its 30-second budget and continued; adapters disconnected before
+systemd relaunched the gateway. No cleanup workaround was applied.
+
+Activation verified at 15:12:39 UTC: service active/running, new PID **375348**,
+service start 15:11:56 UTC, persisted gateway state running and loaded code SHA
+**b7a5731dd2dfda8dfb6659a91ff21563ac6b9e8e**. Discord connected at 15:12:36 UTC
+with writer PID 375348 and no platform error; lad-studio is among ten served
+profiles. The final catalogue follow-up changes documentation only; production
+and test blobs remain identical to the reviewed and loaded source.
+
+## Separate live canary proposal — not authorized or executed
+
+Under separate approval for the live send and temporary job state, use a
+dedicated no-agent canary with a unique marker at the authorized satellite
+destination; inspect its execution/delivery outcome and confirm only one
+message. Do not rerun the existing production job. Runtime startup verification
+alone does not establish live end-to-end cron delivery.

@@ -1,18 +1,20 @@
 # Hermes Agent local patch catalogue
 
-## Prepared October 27 candidate (not active)
+## October 27 active addition
 
-Canonical `peter/hermes-patches` remains at `436fc0c130`. This candidate is retained
-only on its isolated branch; integration and runtime activation are separate.
+Canonical `peter/hermes-patches` includes the reviewed source below. After Peter's
+separate approval, gateway PID 375348 loaded `b7a5731dd2` on October 27; Discord
+reconnected and lad-studio is served. No live canary or production-job rerun.
 
 | Date | Source ref | Title | Report | Status |
 |---|---|---|---|---|
-| 2026-10-27 | `adbe42a737` | Shared cron delivery for satellites with local sessions | [Report](reports/2026-10-27-adbe42a737-satellite-cron-shared-delivery.md) | `peter/cron-shared-delivery-candidate`; 147 tests / 12 checks passed; independent exact-commit review: no blockers. NOT loaded, deployed, pushed, or published. |
+| 2026-10-27 | `adbe42a737` | Shared cron delivery for satellites with local sessions | [Report](reports/2026-10-27-adbe42a737-satellite-cron-shared-delivery.md) | Integrated and loaded; 147 tests / 12 checks passed again in canonical checkout; independent exact-commit review: no blockers. Live delivery untested; no push/publication. Drop after equivalent upstream correction is adopted. |
 
-## Current active stack
+## October 23 retained stack baseline
 
-Authoritative for candidate `update/hermes-patches-20261023T185053Z` on upstream
-`f3b5b980d6158794beb3d1044fd7b8ca4b8f0b23`. Only this table has active core patch claims.
+Baseline candidate `update/hermes-patches-20261023T185053Z` on upstream
+`f3b5b980d6158794beb3d1044fd7b8ca4b8f0b23`; retained core patches are listed here,
+with the October 27 addition above.
 Published to the fork only by explicit lease from `b0f57c4e71`; live installation is a separate step. See the
 [October 23 reconciliation](reports/2026-10-23-upstream-reconciliation.md) for lineage, decisions, verification and limitations.
 All later sections are historical.
