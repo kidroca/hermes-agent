@@ -66,7 +66,9 @@ print monitors remain disabled.
 ## Integration is not activation
 
 Peter approved the fix and live activation. Canonical `/opt/hermes-agent`, branch
-`peter/hermes-patches`, fast-forwarded to `40dcfd5a51`; no push or publication.
+`peter/hermes-patches`, fast-forwarded to `40dcfd5a51`. Peter subsequently approved
+publication of the five outgoing commits to `origin/peter/hermes-patches`, plus
+this catalogue-disposition update; no upstream PR was requested.
 The gateway tool guard blocked restart from inside the gateway. The latest
 parent receipt still reports PID **3072054**, code SHA **`b6ffe5f6fc32`**:
 **the fix is integrated, not verified loaded**.
@@ -100,7 +102,7 @@ metadata/diff follow-up on three PRs. All three were **open, unmerged**
   (created October 27, updated October 28): same permanent empty quiet-cron
   symptom, **search metadata only**, not a directly inspected issue body.
 
-No merge-likelihood claim or publication request. Drop or reconcile the local
+No merge-likelihood claim or upstream-publication request. Drop or reconcile the local
 patch when equivalent upstream behavior is adopted, verifying lifecycle,
 picker visibility and durable-receipt contracts rather than stacking competing
 finalizers blindly. Peter has been asked to run external WSL `hermes gateway restart`;

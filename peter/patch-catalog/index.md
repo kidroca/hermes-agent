@@ -4,7 +4,8 @@
 
 Canonical `peter/hermes-patches` fast-forwarded to `40dcfd5a51`; source is not
 verified loaded (latest receipt: PID 3072054, code SHA `b6ffe5f6fc32`). Approved
-external WSL restart is requested; no push/publication. Empty gate-fire rows
+external WSL restart is requested. Peter approved fork publication on October 30;
+no upstream PR requested. Empty gate-fire rows
 remain durable for dedup/audit but completed empty cron entries leave the picker.
 
 | Date | Source ref | Title | Report | Status |
