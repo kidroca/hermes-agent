@@ -216,6 +216,20 @@ def scheduler_execution_id(job_id, request_id):
     return request_id.removeprefix(cron_request_id(job_id, ''))
 
 
+def finish_pre_agent(owner_execution, job, *, skipped=False):
+    """End an admitted fire that never reached agent construction, without closing its owner's DB."""
+    if owner_execution is None:
+        return
+    from cron.scheduler import _BoundedCronSessionDB, _set_cron_session_title
+    authority, session_id, job_id, _ = owner_execution
+    db = _BoundedCronSessionDB(authority.db, job_id)
+    name = ' '.join(str(job.get('name') or job_id).split())[:60]
+    try:
+        _set_cron_session_title(db, session_id, f'{name} · {session_id[-12:]}')
+    finally:
+        db.end_session(session_id, 'cron_skipped' if skipped else 'cron_error')
+
+
 def _run_identified(run_job, job, execution_id, **kwargs):
     """``run_job`` inside this fire's cron identity (``ctx.current_cron_execution()``).
 

@@ -2588,10 +2588,15 @@ def run_job(
     job_id = job["id"]
     job_name = str(job.get("name") or job.get("prompt") or job_id or "cron job")
 
-    early, prompt = _prepare_job_prompt(job, job_id, job_name, extra_prompt, cancel_event)
+    from gateway.session_cron import finish_pre_agent
+    try:
+        early, prompt = _prepare_job_prompt(job, job_id, job_name, extra_prompt, cancel_event)
+    except BaseException:
+        finish_pre_agent(owner_execution, job)
+        raise
     if early is not None:
+        finish_pre_agent(owner_execution, job, skipped=early[0])
         return early
-    from run_agent import AIAgent
 
     _cron_session_id = (owner_execution[1] if owner_execution is not None else
                         f"cron_{job_id}_{_hermes_now().strftime('%Y%m%d_%H%M%S')}")
@@ -2605,6 +2610,7 @@ def run_job(
     _worker_state: dict = {}
     scope = _CronRunScope(job, job_id, execution_id)
     try:
+        from run_agent import AIAgent
         scope.enter()
         if scope.workdir:
             logger.info("Job '%s': using task-scoped workdir %s", job_id, scope.workdir)
@@ -2683,6 +2689,8 @@ def run_job(
             _worker_state.get("future"), _session_db, agent, job_id, job_name, _cron_session_id,
             workdir=scope.workdir)
         scope.exit()
+        if _session_db is None:
+            finish_pre_agent(owner_execution, job)
         if _session_db and not _worker_teardown_deferred:
             _finalize_cron_session(_session_db, agent, job_id, job_name, _cron_session_id,
                                    workdir=scope.workdir)

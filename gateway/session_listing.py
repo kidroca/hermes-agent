@@ -48,6 +48,10 @@ def stored_picker_sessions(authority, actor, *, limit, include_hidden=False):
             tip = db.get_session(sid)
             if tip is None:
                 continue
+            # Gate-only cron fires retain their receipts, not empty human history entries.
+            if (tip['source'] == 'cron' and tip.get('ended_at') is not None
+                    and not row.get('message_count') and not tip.get('message_count')):
+                continue
             if not local:
                 # A messaging conversation, under its lineage root (the cold mount; the listing
                 # projects a compressed lineage onto its tip): this profile's rows the mount opens.
