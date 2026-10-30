@@ -1,5 +1,16 @@
 # Hermes Agent local patch catalogue
 
+## October 30 integrated addition — activation pending
+
+Canonical `peter/hermes-patches` fast-forwarded to `40dcfd5a51`; source is not
+verified loaded (latest receipt: PID 3072054, code SHA `b6ffe5f6fc32`). Approved
+external WSL restart is requested; no push/publication. Empty gate-fire rows
+remain durable for dedup/audit but completed empty cron entries leave the picker.
+
+| Date | Source ref | Title | Report | Status |
+|---|---|---|---|---|
+| 2026-10-30 | `40dcfd5a51` | Close gated cron fires without ghost picker sessions | [Report](reports/2026-10-30-cron-gate-ghost-sessions.md) | Integrated, activation pending; 6 RED regressions, canonical 77 tests / 12 checks passed; independent supplied-diff review: no blockers. Proven 635-row historical cleanup, zero deletes. High overlap with open unmerged #143808 / #145135 / #143562; reconcile when equivalent upstream is adopted. |
+
 ## October 27 active addition
 
 Canonical `peter/hermes-patches` includes the reviewed source below. After Peter's
