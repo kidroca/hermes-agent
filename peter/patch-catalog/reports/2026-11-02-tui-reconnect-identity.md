@@ -1,12 +1,14 @@
 # Preserve the mounted TUI conversation across transport replacement
 
 - Date: 2026-11-02
-- Repo: `/opt/hermes-agent`; isolated candidate `/tmp/hermes-tui-reconnect`
+- Repo: `/opt/hermes-agent`; implemented in a disposable isolated candidate worktree.
 - Patch ref: `95a6b63c9804630501d96642d304279c4a11dd0c`
 - Base: `bfd0cf7b9831f8f9703b73add59d70fc7f7f307d`
-- Branch: `peter/tui-reconnect-candidate`
-- Local status: reviewed and committed candidate only. Not integrated into
-  `peter/hermes-patches`, deployed, restarted, pushed, or submitted upstream.
+- Branch: integrated into `peter/hermes-patches`; candidate lineage
+  `peter/tui-reconnect-candidate` at `e132534d2e`.
+- Local status: Peter approved integration and live TUI rebuilding. Canonical
+  checkout fast-forwarded to `e132534d2e` and bundle rebuilt. Existing Node TUIs
+  retain old code until reopened. No gateway restart, fork push or upstream submission.
 - Motivation: several open TUIs blanked together after heartbeat stalls. A poll
   could replace a closing socket before its close callback notified recovery;
   readiness then allocated a fresh conversation instead of reopening the mounted one.
@@ -33,7 +35,20 @@ upstream reconnect correction.
 
 ## Tests / verification
 
-Parent-executed receipts on the isolated candidate:
+Fresh parent-executed verification from `/opt/hermes-agent` after integration:
+
+- Focused gateway-client, reconnect integration, ready-handler and startup-image
+  tests: 4 files, 155 passed. Typecheck passed. Repository checks against
+  `bfd0cf7b9831f8f9703b73add59d70fc7f7f307d`: 11/12 pass, no health findings.
+  The archive gate flags four existing ignored desktop packager archives under
+  `.cache/desktop-inputs/packager/builder/` (7zip and icons bundles), not profile
+  exports introduced by this patch. They were left untouched. Literal scratch
+  paths in the candidate report were corrected during integration.
+- `rtk npm run build` rebuilt `/opt/hermes-agent/ui-tui/dist/entry.js` successfully.
+  Its hash and size equal the candidate artifact below. No running terminal was
+  restarted; no live disconnect was induced.
+
+Historical parent-executed receipts on the isolated candidate:
 
 - Original two production files restored for deterministic A/B: 14 failures and
   4 passes among the 18 new integration cases; candidate restored: 18/18 passed.
@@ -52,7 +67,7 @@ Parent-executed receipts on the isolated candidate:
 - Independent pre-commit source review approved the final snapshot; committed
   source/test bytes match that reviewed snapshot. Reviewer did not independently
   rerun the parent's test commands.
-- Parent-built entry: `/tmp/hermes-tui-reconnect/ui-tui/dist/entry.js`, 4,105,741
+- Candidate-built entry: `ui-tui/dist/entry.js`, 4,105,741
   bytes; SHA-256
   `5905bcbce4652ad0acbd0886c559458f6c1744259313372bce62a7e825e57d85`.
 
@@ -93,11 +108,11 @@ maintainer approval. Empty formal-review results do not explain why it remains o
 
 ## Recommendation
 
-Keep this as a candidate until Peter approves live source integration and activation.
-Review the tested candidate before deployment; publication is a separate permission.
-This is a TUI-only change: integration and rebuilding live `ui-tui/dist` require
-separate approval. Already-running Node TUIs retain old code and must be reopened
-and resumed to load the fix. A gateway restart is not inherently required.
+Integration and rebuilding live `ui-tui/dist` were approved and completed. Fork
+publication remains a separate permission. Already-running Node TUIs retain old
+code and must be reopened and resumed to load the fix; newly launched TUIs use
+the rebuilt bundle. A gateway restart is not required. Live end-to-end interruption
+and terminal rendering remain unverified.
 When adopting upstream changes, compare behavior rather than titles: drop local
 hunks only after upstream preserves the same mounted identity under delayed/missing
 close, concurrent polling, and interrupted resume without prompt replay. Expect
