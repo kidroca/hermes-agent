@@ -339,8 +339,12 @@ export class GatewayClient extends EventEmitter {
     }
   }
 
-  // The shared heartbeat found no inbound frame for a full deadline: force the
-  // socket closed so the ordinary close path reconnects (issue #32997).
+  // Retire failed transports before replacement; close may arrive late or never.
+  private retireGatewayTransport(reason: string) {
+    this.closeGatewaySocket()
+    this.handleTransportExit(1006, reason)
+  }
+
   private onHeartbeatFailure() {
     const ws = this.ws
 
@@ -350,11 +354,7 @@ export class GatewayClient extends EventEmitter {
 
     this.lifecycle('[lifecycle] websocket silent drop detected (heartbeat ack timeout); forcing reconnect')
 
-    try {
-      ws.close()
-    } catch {
-      // ignore
-    }
+    this.retireGatewayTransport('gateway websocket silent drop (heartbeat ack timeout)')
   }
 
   private scheduleReconnect() {
@@ -869,6 +869,10 @@ export class GatewayClient extends EventEmitter {
     }
 
     if (!this.ws || this.ws.readyState === WS_CLOSED || this.ws.readyState === WS_CLOSING) {
+      if (this.ws) {
+        this.retireGatewayTransport(this.text('libText.gateway.websocketClosed'))
+      }
+
       this.start()
 
       if (!this.options.attachUrl?.()) { await this.bootstrapFlight }
