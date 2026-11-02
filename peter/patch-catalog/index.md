@@ -1,5 +1,14 @@
 # Hermes Agent local patch catalogue
 
+## November 2 candidate — integration and activation pending
+
+The reconnect fix is prepared on `peter/tui-reconnect-candidate`, separate from the
+live checkout. No integration, deployment, restart, push or upstream submission.
+
+| Date | Source ref | Title | Report | Status |
+|---|---|---|---|---|
+| 2026-11-02 | `95a6b63c98` | Preserve mounted TUI conversation across transport replacement | [Report](reports/2026-11-02-tui-reconnect-identity.md) | Reviewed candidate only; 18 integration cases, full TUI suite 1,898 passed / 2 skipped, typecheck/lint/build and 12 checks passed. High overlap with open #114188; merged #112227 does not cover residual race. Live integration and activation await approval. |
+
 ## October 30 integrated addition — activation pending
 
 Canonical `peter/hermes-patches` fast-forwarded to `40dcfd5a51`; source is not
