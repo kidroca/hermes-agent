@@ -1090,11 +1090,16 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
 
     // Keep the recovery target until resume succeeds, including across a second
     // disconnect during setup or history loading. Recovery never resends the prompt.
-    const recoverSid = recoverSidRef?.current
+    const state = getUiState()
+    const recoverSid = recoverSidRef?.current ?? state.storedSid ?? state.sid
 
-    if (recoverSidRef && recoverSid) {
+    if (recoverSid) {
+      if (recoverSidRef) {
+        recoverSidRef.current = recoverSid
+      }
+
       void resumeById(recoverSid).then(() => {
-        if (getUiState().sid && recoverSidRef.current === recoverSid) {
+        if (getUiState().sid && recoverSidRef?.current === recoverSid) {
           recoverSidRef.current = null
         }
       })

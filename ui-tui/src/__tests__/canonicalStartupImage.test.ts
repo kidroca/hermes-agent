@@ -21,7 +21,6 @@ it('startup image bytes travel with the literal prompt and attachment failure pr
   try {
     for (const valid of [true, false]) {
       resetUiState()
-      patchUiState({ sid: 'owner' })
 
       if (!valid) { rmSync(startup.image) }
       const submit = vi.fn()
@@ -31,7 +30,7 @@ it('startup image bytes travel with the literal prompt and attachment failure pr
       const handler = createGatewayEventHandler({
         gateway: { gw: { isCanonical: true, request }, rpc: request },
         composer: { setInput: vi.fn(), enqueue: vi.fn() },
-        session: { STARTUP_RESUME_ID: 'owner', colsRef: { current: 80 }, resumeById: vi.fn(), newSession: vi.fn(), resetSession: vi.fn(), setCatalog: vi.fn() },
+        session: { STARTUP_RESUME_ID: 'owner', colsRef: { current: 80 }, resumeById: vi.fn(() => patchUiState({ sid: 'owner' })), newSession: vi.fn(), resetSession: vi.fn(), setCatalog: vi.fn() },
         submission: { submitLiteralRef: { current: submit }, submitRef: { current: vi.fn() } },
         system: { sys, bellOnComplete: false, bellOnPrompt: false },
         transcript: { appendMessage: vi.fn(), panel: vi.fn(), setHistoryItems: vi.fn() },
