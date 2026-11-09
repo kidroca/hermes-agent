@@ -1,5 +1,44 @@
 # Hermes Agent local patch catalogue
 
+## November 9 verified update
+
+Authoritative retained stack for `update/hermes-patches-20261109` on upstream
+`8ad89d45ac6a5da0c6b2cc641bcc12aa41ceb89b`. Source snapshot
+`370cf2cc67a81270d7fed9bd4f90d96bbc7ea14c` passed the scoped verification and two
+independent reviews. The live checkout remains at `59eb40fa8d`; fork publication
+uses an explicit lease against that old tip. See the [November 9 reconciliation](reports/2026-11-09-upstream-reconciliation.md)
+for the full lineage, conflict resolutions and verification limits.
+
+| Date | Previous refs → active refs | Title | Report | Decision |
+|---|---|---|---|---|
+| 2026-11-09 | `ab77b1b0fe` + `6bef9fec10` + `625eedc9b1` + `872c5efd90` + `7ee1e480b7` → `1555676d42` + `4fbb938355` + `029248e5e5` + `f536742a3e` + `fd80617053` | Portable file-only SSH uploads | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain. |
+| 2026-11-09 | `3debae964c` + `1155511c27` + `ada56f5856` → `bb1ab2ed2b` + `8b96c493a8` + `50e2d41660` | On-demand configured CDP launch | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain bounded launch and scoped endpoint locks. |
+| 2026-11-09 | `0988d57974` → `7eeca3e0ec` | TUI missing database handle recovery | [Report](reports/2026-11-09-upstream-reconciliation.md) | Compose with upstream Daybreak sync. |
+| 2026-11-09 | `559160ee29` + `1b64304918` + `838e2a0de8` + `f7044c220b` → `c632658063` + `837340e9be` + `996bbd5d09` + `266cdb4f9e` | External-CDP activity leases | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain around current browser route/daemon logic. |
+| 2026-11-09 | `1ce79b79cb` → `ad345d8639` | Canonical ancestry advisory | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain separately from fork update selection. |
+| 2026-11-09 | `b656e03cfb` + `3f31c1730d` → `deec5144f1` + `f26abe24ec` | External-memory structured notice bridge | [Report](reports/2026-11-09-upstream-reconciliation.md) | Adapt to upstream `agent_init_memory_provider.py`. |
+| 2026-11-09 | `eb94493bc5` → `8318e5a98b` | Doctor retirement documentation | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain documentation only. |
+| 2026-11-09 | `e6c99cea50` + `509b3ae339` → `1d0b48f427` + `f07904a942` | Hindsight checkout hygiene | [Report](reports/2026-11-09-upstream-reconciliation.md) | Personal routing remains ignored/untracked. |
+| 2026-11-09 | `bd1700f5db` → `680d8ffb8e` | Implicit CLI memory workspace | [Report](reports/2026-11-09-upstream-reconciliation.md) | Move CLI-only fallback to upstream helper. |
+| 2026-11-09 | `8ac370a23e` → `f62342fac0` | Exact approval public display context | [Report](reports/2026-11-09-upstream-reconciliation.md) | Partial retention; Discord retirement is upstream. |
+| 2026-11-09 | `8be151aa45` → `0a6c1731b7` | Linux ownership across clock steps | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain; coordinated activation boundary unchanged. |
+| 2026-11-09 | `b7bef45e35` → `f8c5506019` | Acknowledged SSH sync progress | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain retry checkpoints and upstream sync planning. |
+| 2026-11-09 | `dd2f9a04c7` → `8c61935a29` | ACP explicit editor close | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain cancel/drain/detach with durable history. |
+| 2026-11-09 | `40dcfd5a51` → `d3ef5ff94b` | Gated cron ghost-session lifecycle | [Report](reports/2026-11-09-upstream-reconciliation.md) | Retain; regression uses upstream `SessionActor`. |
+| 2026-11-09 | `95a6b63c98` → `3ca6298238` | Mounted TUI conversation on reconnect | [Report](reports/2026-11-09-upstream-reconciliation.md) | Move transport fix to shared client; retain durable-ID recovery. |
+
+Dropped as equivalent upstream behavior: `6ed0e4bbcd` (Discord exact-request
+approval binding, upstream `cfed2ca71f`/`5ab58da1f6`) and `adbe42a737` (shared
+satellite cron delivery, upstream `01dffd3b47`/`18e16bdd7d`). The mixed
+`8ac370a23e` patch keeps public display context only; its local Discord retirement
+implementation is superseded. No policy retirement is disguised as equivalence.
+
+## Historical receipts — all subsequent sections
+
+The following sections preserve their original dated SHAs and test/activation
+claims. They are historical, including headings that originally said “active” or
+“current”; use the November 9 table and report for the present candidate.
+
 ## November 2 integrated addition — TUI bundle rebuilt
 
 Peter approved integration and rebuilding the live TUI bundle. The reviewed candidate

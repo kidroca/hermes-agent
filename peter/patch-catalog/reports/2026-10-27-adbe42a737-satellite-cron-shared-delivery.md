@@ -1,5 +1,7 @@
 # Shared cron delivery for satellites with local sessions
 
+> Historical/superseded as of 2026-11-09: local patch `adbe42a737` is dropped in the current candidate. Upstream `01dffd3b47`/`18e16bdd7d` provide the equivalent credential-platform and stable ownership behavior, with regression coverage. This does not supersede the separate gated-fire ghost-session patch. See [November 9 reconciliation](2026-11-09-upstream-reconciliation.md) for current lineage and gates.
+
 Date: 2026-10-27. Source: `adbe42a737e8b8aac7701b4d826b3a5e44b60e8b`.
 Base: `436fc0c13056dd44979c17413cee3552ff5b9a15`.
 Branch: `peter/cron-shared-delivery-candidate`.
