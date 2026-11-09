@@ -1,5 +1,7 @@
 # Bind Discord approval buttons to exact queue requests
 
+> Historical/superseded as of 2026-11-09: local replay `6ed0e4bbcd` is dropped in the current candidate. Upstream `cfed2ca71f`/`5ab58da1f6` and the current Discord approval view provide exact-request binding. This original receipt retains its dated source and verification history. See [November 9 reconciliation](2026-11-09-upstream-reconciliation.md) for current lineage and gates.
+
 - Date: 2026-10-14 (Europe/Sofia); authenticated upstream snapshot taken just after local midnight.
 - Repo: `kidroca/hermes-agent` (`/opt/hermes-agent`); publication preparation in an isolated worktree.
 - Patch ref: `21fbc45964e99d86f6dac9bef0efc56124b2cd5e`; original independently reviewed lineage `2c44a104ebf618d8b9fb9fb865945a482a2cfd33`.

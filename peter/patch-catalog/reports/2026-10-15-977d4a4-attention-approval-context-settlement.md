@@ -1,5 +1,7 @@
 # Approval display context and exact Discord peer settlement
 
+> Historical mixed-patch receipt. As of 2026-11-09, only public display-context capture/binding/copy behavior remains local, at `f62342fac0`. Discord exact-request settlement/retirement uses upstream observers; the local retirement module is removed. The original source SHA and live-activation claims below remain historical. See [November 9 reconciliation](2026-11-09-upstream-reconciliation.md) for current lineage and gates.
+
 - Date: 2026-10-15 (Europe/Sofia); clock-tool snapshot: 2026-10-15 04:53:28 UTC. Upstream reads followed within this session.
 - Exact sourceSHA: `977d4a420c44fb8bd97679c1004c769be93d9387`; detached checkout HEAD independently verified equal. No ref substitution or branch-tip inference.
 - Commit: `fix(approvals): 🛠️ Bind exact display context and retire settled Discord peers`; author/committer recorded by Git as `🤖 hermes / gpt-6.1-sol <ubuntu@kidroca.com>`. Parent reports source-patch author names/emails verified; no authorship rewrite performed.

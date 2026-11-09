@@ -1,5 +1,7 @@
 # 2026-10-23 upstream reconciliation
 
+> Historical reconciliation, superseded by the 2026-11-09 candidate. In particular, its Discord-retention claim and old memory-helper path describe the October 23 tree, not current upstream or the current retained stack. See [November 9 reconciliation](2026-11-09-upstream-reconciliation.md) for current lineage and gates.
+
 - Date: 2026-10-23
 - Prepared by: Claude Code (Opus 5.5), first Claude-run fork update
 - Upstream base: `f3b5b980d6158794beb3d1044fd7b8ca4b8f0b23`
