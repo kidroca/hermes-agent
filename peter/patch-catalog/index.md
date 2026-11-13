@@ -1,5 +1,11 @@
 # Hermes Agent local patch catalogue
 
+## November 13 review candidate — not integrated or activated
+
+| Date | Source ref | Title | Report | Status |
+|---|---|---|---|---|
+| 2026-11-13 | `9c438148494e6b73bbe8be5e1012938ebe8596df` | Profile-bound early Slack plugin selection | [Report](reports/2026-11-13-slack-early-selection.md) | Isolated branch on exact `8bac3a7fde9378a009bc72c4a307b37c95f91fb4`; 648 tests passed, 13 non-Ruff checks passed. Full checker blocked by unavailable pinned Ruff 0.15.22. Parent review pending; no merge, push, deployment or restart. Selection retains native authorization; consumer claims belong downstream. |
+
 ## November 9 verified update
 
 Authoritative retained stack for `update/hermes-patches-20261109` on upstream
