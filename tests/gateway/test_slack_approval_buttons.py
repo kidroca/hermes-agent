@@ -600,7 +600,8 @@ class TestSlackReactionForwarding:
         adapter = _make_adapter()
         forwarded: list[dict] = []
 
-        async def _capture(event):
+        async def _capture(event, *, reaction_trigger=False):
+            assert reaction_trigger is True
             forwarded.append(event)
 
         with patch.object(adapter, "_handle_slack_message", new=_capture):
@@ -633,7 +634,8 @@ class TestSlackReactionForwarding:
         })
         forwarded: list[dict] = []
 
-        async def _capture(event):
+        async def _capture(event, *, reaction_trigger=False):
+            assert reaction_trigger is True
             forwarded.append(event)
 
         with patch.object(adapter, "_handle_slack_message", new=_capture):
@@ -661,8 +663,8 @@ class TestSlackReactionForwarding:
         assert synth["_hermes_reaction"]["name"] == "thumbsup"
         assert synth["_hermes_reaction"]["action"] == "added"
         assert synth["_hermes_reaction"]["reacted_to_ts"] == "2000.0"
-        # Pre-authorized as addressed-to-the-bot (skips mention gate only).
-        assert synth["_hermes_force_process"] is True
+        # Eligibility is carried by the trusted caller, never the raw event.
+        assert "_hermes_force_process" not in synth
 
 
     @pytest.mark.asyncio
@@ -678,7 +680,8 @@ class TestSlackReactionForwarding:
         })
         forwarded: list[dict] = []
 
-        async def _capture(event):
+        async def _capture(event, *, reaction_trigger=False):
+            assert reaction_trigger is True
             forwarded.append(event)
 
         with patch.object(adapter, "_handle_slack_message", new=_capture):
@@ -710,7 +713,8 @@ class TestSlackReactionForwarding:
         })
         forwarded: list[dict] = []
 
-        async def _capture(event):
+        async def _capture(event, *, reaction_trigger=False):
+            assert reaction_trigger is True
             forwarded.append(event)
 
         with patch.object(adapter, "_handle_slack_message", new=_capture):
@@ -741,7 +745,8 @@ class TestSlackReactionForwarding:
         adapter.set_reaction_handler(_hook)
         forwarded: list[dict] = []
 
-        async def _capture(event):
+        async def _capture(event, *, reaction_trigger=False):
+            assert reaction_trigger is True
             forwarded.append(event)
 
         with patch.object(adapter, "_handle_slack_message", new=_capture):

@@ -49,6 +49,6 @@ async def test_admitted_message_carries_whether_it_was_addressed(adapter, extra,
             patch.object(adapter, "_fetch_thread_context", new=AsyncMock(return_value=None)), \
             patch.object(adapter, "_fetch_thread_parent_text", new=AsyncMock(return_value="")), \
             patch.object(adapter, "_has_active_session_for_thread", return_value=False):
-        await adapter._handle_slack_message(event)
+        await adapter._handle_slack_message(event, reaction_trigger=event.pop("_hermes_force_process", False))
     adapter.handle_message.assert_awaited_once()
     assert adapter.handle_message.await_args.args[0].reply_expected is expected

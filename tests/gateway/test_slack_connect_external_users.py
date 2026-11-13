@@ -167,7 +167,8 @@ async def test_connect_pair_starts_one_turn_only():
     adapter = _make_adapter()
     first = await adapter._prefilter_inbound(_connect_message_event(), _connect_message_body())
     assert first is not None
-    _event, team_id, channel_id = first
+    _event, team_id, channel_id, selected = first
+    assert selected is False
     assert team_id == HOST_TEAM
     assert channel_id == SHARED_CHANNEL
 
@@ -448,7 +449,8 @@ def _reaction_adapter(reactor_team: str):
     adapter._drop_bot_sender = AsyncMock(return_value=False)
     accepted = []
 
-    async def _impl(event, payload=None):
+    async def _impl(event, payload=None, *, reaction_trigger=False):
+        assert reaction_trigger is True
         accepted.append(await adapter._prefilter_inbound(event, payload))
 
     adapter._handle_slack_message = _impl
