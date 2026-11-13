@@ -1353,6 +1353,71 @@ With heavy delegation (e.g. orchestrator roles × 5 leaves × nested depth), `su
 
 ---
 
+### `pre_platform_message`
+
+Early, **fail-closed eligibility selection**, currently implemented by the native Slack
+adapter. Concrete consumer: the separately maintained `hermes-gitlab-automation` filter
+plugin; CI parsing, allowlists and business actions belong there, not in Hermes.
+
+```python
+import json
+
+def register(ctx):
+    def select_message(platform, event_json, **kwargs):
+        if platform != "slack":
+            return "delegate"
+        event = json.loads(event_json)
+        # Apply the plugin's configured, narrow predicate here.
+        return "delegate"
+    ctx.register_hook("pre_platform_message", select_message)
+```
+
+Keyword fields are immutable strings: `platform`, `profile_home`, `team_id`,
+`bot_user_id`, and `event_json` (a JSON snapshot of the normalized Slack message,
+including blocks/attachments when present). The SDK envelope, tokens, adapter,
+gateway and mutable `SessionSource` are **not** exposed. Parsed JSON is a plugin-owned
+copy; changing it cannot change the sender, routing or authorization provenance.
+Narrow callback signatures receive only their declared fields; async callbacks work.
+
+Return exactly one of these strings:
+
+- `delegate`: unchanged native bot and mention eligibility.
+- `skip`: drop this event.
+- `select`: bypass only bot and mention eligibility for this event. Self-echo,
+  deduplication, non-conversational subtype, ignored/allowed channel, disabled-DM,
+  other-user-address, authorization and runner bot-loop checks remain in force.
+
+With no registered callback, behavior is native. Callbacks run in registration order;
+any `skip`, exception or invalid result (including `None`) vetoes the event, even after
+an earlier `select`. Otherwise any `select` wins over `delegate`. A failed event does
+not disable selection for later events. Async callbacks use `plugins.hook_callback_timeout`;
+synchronous callbacks must be short and nonblocking. Cancellation of the caller propagates.
+This is not the observer hook dispatcher's fail-open/ignore-`None` contract.
+
+Selection runs after edit normalization, replay and ignored-channel filtering but before
+Slack's bot/mention gates and expensive message enrichment. It is bound to the receiving
+adapter's **transport-owner profile** at construction, not the ambient callback context
+or a later routed runtime profile. Install the filter in that receiving profile. Native
+source construction then routes a selected first channel message to its root timestamp as
+usual; no prior human session or `inject_message` call is needed. Internal reaction triggers
+use a trusted caller argument; a raw `_hermes_force_process` property grants nothing.
+
+**Selection does not authorize a sender.** In particular, a userless Slack app/workflow
+post can still be rejected by the runner. This hook neither invents a user ID nor enables
+`allow_bots`/allow-all. A consumer must establish an existing, appropriately narrow native
+authorization configuration separately; do not describe a selected event as authorized.
+Do not consume durable automation claims here: channel and user authorization can still
+reject the selected event. Claim only at an appropriately authorized downstream stage.
+
+Runtime prerequisite: this fork's early-selection patch, including the Slack integration,
+must be present in the running process. Older runtimes accept unknown hook registrations
+without invoking them. Consumers can detect the published
+`gateway.platforms.inbound_selection.bind_inbound_selector` capability by import and report
+an unsupported runtime instead of silently relying on registration alone. Updating source
+and activating it remain separate operator actions; installing a filter does not update or
+restart Hermes. The serialized payload is host-process compatible, but live Slack transport
+and isolated plugin-host deployment require their own acceptance verification.
+
 ### `pre_gateway_dispatch`
 
 Fires **once per incoming `MessageEvent`** in the gateway, at ingress, after the internal-event guard and before the message is admitted or dispatched. Where it runs relative to authorization depends on how the message arrived (see **Fires** below). This is the interception point for gateway-level message-flow policies (listen-only windows, human handover, per-chat routing, etc.) that don't fit cleanly into any single platform adapter.

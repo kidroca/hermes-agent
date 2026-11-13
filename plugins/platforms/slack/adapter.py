@@ -57,11 +57,13 @@ from gateway.platforms.base import (
 from gateway.platforms.event import MessageEvent, MessageType, ProcessingOutcome
 
 try:  # sibling modules; support both package and flat plugin-dir import
+    from .adapter_admission import SlackAdmissionMixin
     from .block_kit import render_blocks, sanitize_blocks
     from .adapter_slash_lane import SlashHandoffLanes
     from .adapter_slash_payload import slash_command_text, slash_thread_id
     from .adapter_reactions_context import slack_reactions_marker
 except ImportError:  # pragma: no cover - plugin loaded outside package context
+    from adapter_admission import SlackAdmissionMixin  # type: ignore
     from block_kit import render_blocks, sanitize_blocks  # type: ignore
     from adapter_slash_lane import SlashHandoffLanes  # type: ignore
     from adapter_slash_payload import slash_command_text, slash_thread_id  # type: ignore
@@ -990,7 +992,7 @@ def _is_transient_transport_error(e: BaseException) -> bool:
         and not is_permanent_tls_error)
 
 
-class SlackAdapter(BasePlatformAdapter):
+class SlackAdapter(SlackAdmissionMixin, BasePlatformAdapter):
     """Slack bot adapter (Socket Mode).
     Needs SLACK_BOT_TOKEN (xoxb-, API calls) and SLACK_APP_TOKEN (xapp-, Socket Mode). DMs +
     mention-gated channels, threads, attachments, slash commands, status text."""
@@ -1027,6 +1029,8 @@ class SlackAdapter(BasePlatformAdapter):
     _socket_first_ping_grace_s = 60.0
 
     def __init__(self, config: PlatformConfig):
+        from gateway.platforms.inbound_selection import bind_inbound_selector
+        self._inbound_selector = bind_inbound_selector("slack")
         super().__init__(config, Platform.SLACK)
         self._app: Optional[Any] = None
         self._handler: Optional[Any] = None
@@ -1037,6 +1041,7 @@ class SlackAdapter(BasePlatformAdapter):
         self._bot_display_name: Optional[str] = None
         self._team_clients: dict[str, Any] = {}
         self._team_bot_user_ids: dict[str, str] = {}
+        self._team_bot_ids: dict[str, str] = {}
         self._team_bot_names: dict[str, str] = {}
         # User/channel IDs are workspace-local: name/is_bot caches key by (team_id, id) so
         # multi-workspace processes never reuse another tenant's names (is_bot catches peer-agent
@@ -1752,6 +1757,7 @@ class SlackAdapter(BasePlatformAdapter):
         team_name = auth_response.get("team", "unknown")
         self._team_clients[team_id] = client
         self._team_bot_user_ids[team_id] = bot_user_id
+        self._team_bot_ids[team_id] = auth_response.get("bot_id", "")
         self._team_bot_names[team_id] = bot_name
         if self._bot_user_id is None:
             self._bot_user_id = bot_user_id
@@ -1801,6 +1807,7 @@ class SlackAdapter(BasePlatformAdapter):
             # Reset so a reconnect with dropped/rotated tokens carries no stale identities.
             self._bot_user_id = self._bot_display_name = None
             self._team_clients, self._team_bot_user_ids, self._team_bot_names = {}, {}, {}
+            self._team_bot_ids = {}
             self._app = AsyncApp(
                 token=bot_tokens[0], client=self._new_web_client(bot_tokens[0], proxy_url),
                 before_authorize=_slack_per_request_proxy_middleware(proxy_url))
@@ -1903,6 +1910,7 @@ class SlackAdapter(BasePlatformAdapter):
         await self._close_workspace_clients()
         self._app = self._app_token = self._proxy_url = self._bot_user_id = None
         self._team_clients, self._team_bot_user_ids = {}, {}
+        self._team_bot_ids = {}
         self._channel_team, self._dm_conversation_cache = {}, {}
         self._release_platform_lock()
         logger.info("[Slack] Disconnected")
@@ -3872,12 +3880,12 @@ class SlackAdapter(BasePlatformAdapter):
         if thread_ts is None:
             return
         await self._handle_slack_message(
-            self._synthetic_reaction_event(event, action, thread_ts, team_id))
+            self._synthetic_reaction_event(event, action, thread_ts, team_id), reaction_trigger=True)
 
     def _synthetic_reaction_event(
         self, event: dict, action: str, thread_ts: str, team_id: str) -> dict:
         """Message-shaped event for a reaction. The reaction's own event_ts keeps the deduplicator
-        from conflating it with the reacted-to message; ``_hermes_force_process`` skips the mention
+        from conflating it with the reacted-to message; the trusted caller skips the mention
         requirement (user auth and allowed_channels still apply); ``_hermes_reaction`` is
         informational. An optional handoff target channel replaces the reacted-to channel; a
         channel-only target is a handoff, not a reply — respond top-level there."""
@@ -3892,7 +3900,6 @@ class SlackAdapter(BasePlatformAdapter):
             "channel": channel_id,
             "ts": event.get("event_ts") or f"reaction-{msg_ts}-{reaction_name}-{user_id}",
             "thread_ts": thread_ts,
-            "_hermes_force_process": True,
             "_hermes_reaction": {
                 "name": reaction_name, "action": action, "reacted_to_ts": msg_ts,
                 "event_ts": event.get("event_ts")}}
@@ -4408,7 +4415,7 @@ class SlackAdapter(BasePlatformAdapter):
         self._reacting_message_ids.add(self._workspace_message_marker(team_id, ts))
         self._evict_oldest_by_ts(self._reacting_message_ids, self._REACTING_MESSAGE_IDS_MAX)
 
-    async def _handle_slack_message(self, event: dict, payload: Optional[dict] = None) -> None:
+    async def _handle_slack_message(self, event: dict, payload: Optional[dict] = None, *, reaction_trigger: bool = False) -> None:
         """Guard around :meth:`_handle_slack_message_impl`: the impl claims the ts early (no second
         turn from a mid-flight unfurl); if THIS call newly claimed it and raises, release the claim
         so a retry/edit can re-drive it. Pre-existing claims stay."""
@@ -4417,7 +4424,7 @@ class SlackAdapter(BasePlatformAdapter):
         _claims = getattr(self, "_processed_message_ts", None)
         _was_claimed = bool(_ts) and _claims is not None and _ts in _claims
         try:
-            return await self._handle_slack_message_impl(event, payload)
+            return await self._handle_slack_message_impl(event, payload, reaction_trigger=reaction_trigger)
         except BaseException:
             _claims = getattr(self, "_processed_message_ts", None)
             if _ts and not _was_claimed and _claims is not None and _ts in _claims:
@@ -4453,74 +4460,13 @@ class SlackAdapter(BasePlatformAdapter):
                 return True
         return bool(msg_user and self._bot_user_id and msg_user == self._bot_user_id)
 
-    async def _prefilter_inbound(
-        self, event: dict, payload: Optional[dict]) -> Optional[tuple[dict, str, str]]:
-        """Normalize edits, then drop replays / ignored channels / bot posts / deletions.
-        Returns ``(event, team_id, channel_id)`` for messages the handler should consider."""
-        # Entry log BEFORE any filtering so operators can tell "dropped here"
-        # from "never subscribed in the manifest". Metadata only, never text.
-        # DEBUG entry log — fires BEFORE any filtering so users debugging bot-to-bot interop, allow_bots
-        # config, or SLACK_ALLOWED_USERS drops can confirm whether the event actually arrived from Slack
-        # (vs. being silently filtered upstream by the app's event subscriptions — Socket Mode will not
-        # deliver events the app manifest hasn't subscribed to). See #30091.
-        if logger.isEnabledFor(logging.DEBUG):
-            _bot_profile = event.get("bot_profile") or {}
-            logger.debug(
-                "[Slack] event received type=%s subtype=%s user=%s bot_id=%s bot_name=%s "
-                "channel=%s ts=%s thread_ts=%s", event.get("type"), event.get("subtype"),
-                event.get("user", "") or "", event.get("bot_id", "") or "",
-                (_bot_profile.get("name") if isinstance(_bot_profile, dict) else "") or "",
-                event.get("channel", ""), event.get("ts", ""), event.get("thread_ts", ""))
-        if event.get("subtype") == "message_changed":
-            event = self._normalize_changed_message(event)
-            if event is None:
-                return None
-        # Socket Mode redelivers after reconnects. Scope by workspace: ts is only unique per team.
-        # Dedup: Slack Socket Mode can redeliver events after reconnects (#4777) Scope the dedup id by
-        # workspace: Slack event ts values are only unique within one workspace, so two teams' events with
-        # the same ts must not suppress each other.
-        event_ts = event.get("_slack_changed_event_ts") or event.get("ts", "")
-        dedup_team_id = self._event_team_id(event, payload)
-        if event_ts and self._dedup.is_duplicate(self._workspace_event_id(dedup_team_id, event_ts)):
-            return None
-        channel_id = event.get("channel", "")
-        if self._is_ignored_channel(channel_id):
-            logger.info("[Slack] Ignoring message in configured ignored channel %s", channel_id)
-            return None
-        if await self._drop_bot_sender(event):
-            return None
-        # Edits were normalized above so an @mention added by edit can wake the bot once;
-        # the normalized event retains the edited message's own subtype.
-        # Housekeeping subtypes (joins/leaves, topic/name/purpose changes, convert_to_private/
-        # public, pins, deletions, file comments...) are not a person speaking, so they must
-        # not start a turn in free-response channels (#110778). Allowlist rather than denylist
-        # so subtypes Slack adds later are dropped instead of silently readmitted.
-        # ``file_share`` passes: a human attaching a file is a person speaking, and the
-        # ``file_shared`` fallback synthesizes exactly this subtype. ``thread_broadcast``
-        # passes: a human sharing a threaded reply into the channel carries user/text.
-        # ``me_message`` passes: ``/me`` is a person speaking.
-        # ``bot_message`` already passed allow_bots above; document_mention is an
-        # explicit app mention from a Slack canvas, not a lifecycle notification.
-        # ``file_comment`` stays in the drop set deliberately (triage decision on
-        # #110778): a comment left on a file is not the owner talking to the bot.
-        subtype = event.get("subtype")
-        if subtype not in (
-            None, "", "file_share", "thread_broadcast", "me_message",
-            "bot_message", "document_mention",
-        ):
-            logger.debug(
-                "[Slack] Dropping non-conversational message subtype=%s in channel %s",
-                subtype, channel_id)
-            return None
-        return event, dedup_team_id, channel_id
-
     async def _peer_bot_drop(
         self, event: dict, user_id: str, bot_uid: Optional[str], channel_id: str, team_id: str,
-        is_mentioned: bool) -> bool:
+        is_mentioned: bool, *, selected: bool = False) -> bool:
         """True when a bot *user* post (peer agent: no bot_id/subtype) must be dropped.
         Such posts would otherwise re-trigger via old thread mentions or active sessions and cause
         agent-agent loops. Under ``mentions`` only the current text counts as a summons."""
-        if not user_id or user_id == bot_uid:
+        if selected or not user_id or user_id == bot_uid:
             return False
         sender_is_bot_user = self._event_declares_bot_sender(event)
         if not sender_is_bot_user:
@@ -4556,12 +4502,12 @@ class SlackAdapter(BasePlatformAdapter):
             self._register_mentioned_thread(thread_ts, team_id=team_id)
         return text, original_text, command_probe_text, is_command_text
 
-    async def _handle_slack_message_impl(self, event: dict, payload: Optional[dict] = None) -> None:
+    async def _handle_slack_message_impl(self, event: dict, payload: Optional[dict] = None, *, reaction_trigger: bool = False) -> None:
         """Handle an incoming Slack message event."""
         accepted = await self._prefilter_inbound(event, payload)
         if accepted is None:
             return
-        event, dedup_team_id, channel_id = accepted
+        event, dedup_team_id, channel_id, selected = accepted
         original_text = event.get("text", "")
         # Slack rejects slash commands inside threads, so a leading ``!`` is rewritten to ``/``
         # — only for known gateway commands, so "!nice work" passes through.
@@ -4619,8 +4565,8 @@ class SlackAdapter(BasePlatformAdapter):
         is_thread_reply = bool(event_thread_ts and event_thread_ts != ts)
         # Internal triggers (reactions) skip the mention requirement but NOT
         # allowed_channels or user authorization.
-        force_process = bool(event.get("_hermes_force_process"))
-        if await self._peer_bot_drop(event, user_id, bot_uid, channel_id, team_id, is_mentioned):
+        force_process = any((selected, reaction_trigger))
+        if await self._peer_bot_drop(event, user_id, bot_uid, channel_id, team_id, is_mentioned, selected=selected):
             return
         if (
             not is_one_to_one_dm and bot_uid and not await self._channel_gate_allows(
@@ -4651,7 +4597,7 @@ class SlackAdapter(BasePlatformAdapter):
         media_urls, media_types, media_text_inlined, text = await self._collect_inbound_media(
             event, channel_id, team_id, text, thread_root_media_urls, thread_root_media_types)
         msg_event = await self._build_message_event(
-            event, text=text, original_text=original_text, command_probe_text=command_probe_text,
+            event, selected=selected, text=text, original_text=original_text, command_probe_text=command_probe_text,
             is_command_text=is_command_text, channel_id=channel_id, team_id=team_id, ts=ts,
             user_id=user_id, thread_ts=thread_ts, is_dm=is_dm, media_urls=media_urls,
             media_types=media_types, media_text_inlined=media_text_inlined, channel_context=channel_context,
@@ -4675,7 +4621,7 @@ class SlackAdapter(BasePlatformAdapter):
         await self.handle_message(msg_event)
 
     async def _build_message_event(
-        self, event: dict, *, text: str, original_text: str, command_probe_text: str,
+        self, event: dict, *, text: str, original_text: str, command_probe_text: str, selected: bool = False,
         is_command_text: bool, channel_id: str, team_id: str, ts: str, user_id: str,
         thread_ts: Optional[str], is_dm: bool, media_urls: list[str], media_types: list[str],
         media_text_inlined: list[bool], channel_context: Optional[str], reply_expected: Optional[bool] = None) -> MessageEvent:
@@ -4702,7 +4648,8 @@ class SlackAdapter(BasePlatformAdapter):
             message_id=ts,
             # Workflow/app posts have user=None; flag them so the SLACK_ALLOW_BOTS bypass can
             # authorize them. Same predicate as the drop gate (api_human_users stay human).
-            is_bot=self._event_declares_bot_sender(event))
+            is_bot=self._event_declares_bot_sender(event) or (
+                selected and await self._resolve_user_is_bot(user_id, chat_id=channel_id, team_id=team_id)))
         from gateway.platforms.base import resolve_channel_skills
         # Remaining ``<@UID>`` are OTHER participants (own mention stripped
         # above); render as ``@DisplayName`` so the agent knows who is addressed.

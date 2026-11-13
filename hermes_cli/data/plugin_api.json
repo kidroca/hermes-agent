@@ -39,6 +39,7 @@
         "gateway.platforms.base",
         "gateway.platforms.event",
         "gateway.platforms.helpers",
+        "gateway.platforms.inbound_selection:bind_inbound_selector",
         "gateway.status",
         "hermes_cli.auth_oauth_pkce_plugin",
         "hermes_cli.config",
