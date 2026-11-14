@@ -6,9 +6,12 @@
 - Exact base: `8bac3a7fde9378a009bc72c4a307b37c95f91fb4` (fetched `origin/peter/hermes-patches`).
 - Source commit: `9c438148494e6b73bbe8be5e1012938ebe8596df`.
 - Isolated worktree: `/Users/hermes/hermes-slack-admission-current`.
-- Candidate only: not merged, pushed, deployed, or activated. Deployed checkout untouched.
-- Scoped regression: **648 passed, 0 failed across 42 per-file subprocesses**, including 39 new contract cases.
-- Independent parent review pending. Full code-health verification is blocked by unavailable pinned Ruff; see below.
+- November 14: Peter approved local fast-forward integration into `peter/hermes-patches`; publication remains reserved for Peter using `kidroca`.
+- Activation pending: no gateway restart, consumer activation, or live Slack acceptance is included. The on-disk source must not be described as verified loaded by the running gateway.
+- Parent reran scoped regression: **648 passed, 0 failed across 42 per-file subprocesses**, including 39 new contract cases.
+- Additional platform/session run: **100 passed, 0 failed across 5 files**, including a rerun of the same 39 hook cases; these counts are not disjoint.
+- All **15 pinned code-health checks passed** against the exact base, including Ruff; boundary lint and whitespace checks passed.
+- Independent review found no confirmed hook defects. Remaining test gaps: real session-bookkeeping root/follow-up integration and broader multi-workspace own-identity cases. Live tests are deferred until source and consumer activation.
 
 ## Purpose and upstream overlap
 
@@ -71,4 +74,25 @@ python scripts/check --base 8bac3a7fde9378a009bc72c4a307b37c95f91fb4 \
   --only footguns,shebangs,no-tmp,detached-spawns,install-root,config-writers,config-readers,os-marker-fakes,agents-md,case-collisions,lazy-deps,profile-archives,blob-size
 ```
 
-Result: `scripts/check: 13 checks, ok`. Run the complete pinned checker before integration; these 13 checks are not a substitute for it.
+Result at the original November 13 checkpoint: `scripts/check: 13 checks, ok`. This historical partial result was superseded on November 14 by a successful complete run:
+
+```sh
+/Users/Shared/AI/hermes-agent/.venv/bin/python scripts/check --base 8bac3a7fde9378a009bc72c4a307b37c95f91fb4
+```
+
+Result: `scripts/check: 15 checks, ok`, including pinned Ruff and code health (zero blocking/advisory findings). Parent also reran boundary lint and `git diff --check` successfully.
+
+Additional prescribed-runner invocation, using the same isolated environment as above:
+
+```sh
+scripts/run_tests.sh tests/plugins/platforms/slack \
+  tests/gateway/test_session_group_peers.py \
+  tests/gateway/test_session_group_controls.py \
+  tests/gateway/test_session_continuity.py -q -j 6
+```
+
+Result: 5 files, 100 passed, 0 failed. The 39 early-selection cases overlap the 648-test run.
+
+An offline temporary probe used the actual registered root-only selector, native adapter handlers, canonical `build_session_key`, and outgoing thread resolver. A selected CI root followed by a different, explicitly mentioning human sender produced identical profile/workspace/channel/root session keys and identical original-root reply destinations; bot/human provenance remained distinct. The probe mocked final delivery and did not create a real model session. It is not a durable session-bookkeeping or live Slack acceptance test.
+
+With `strict_mention=true`, unmentioned human follow-ups remain ineligible: selecting a root does not permanently exempt its thread from native mention rules. Full native-session follow-up and multi-workspace own-identity tests remain deferred, not claimed as passed.
