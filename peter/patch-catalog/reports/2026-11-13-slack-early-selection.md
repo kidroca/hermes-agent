@@ -1,5 +1,7 @@
 # Early Slack plugin selection — review candidate
 
+> Historical receipt: current active refs and verification are in [November 15 reconciliation](2026-11-15-upstream-reconciliation.md). Original SHAs and deployment claims below describe their dated checkpoints.
+
 ## Status
 
 - Branch: `feat/slack-early-admission-current`.

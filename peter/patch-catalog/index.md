@@ -1,5 +1,37 @@
 # Hermes Agent local patch catalogue
 
+## November 15 update candidate — authoritative retained stack
+
+Upstream `ce4de3cdc2a99276affd2ec12b3adde8f39636ab`; source snapshot
+`80f822bf97e2021e15d5bd250eaa9e055812fe90`. This table and the
+[November 15 reconciliation](reports/2026-11-15-upstream-reconciliation.md) supersede every active-stack claim below.
+All subsequent sections and their original SHAs are historical receipts. No local
+patch was dropped in this update. Publication and live activation are separate;
+see the report for exact verification and publication status.
+
+| Family | Previous refs → active refs | Decision |
+|---|---|---|
+| Portable file-only SSH uploads | `1555676d42` + `4fbb938355` + `029248e5e5` + `f536742a3e` + `fd80617053` → `acdb2b3e3b` + `f045e667b8` + `113e40dad4` + `40a814d7ff` + `43b68dd82a` | Retain |
+| On-demand configured CDP launch | `bb1ab2ed2b` + `8b96c493a8` + `50e2d41660` → `3749b84b53` + `67eb1d7661` + `d52f4fa711` | Retain |
+| TUI missing database handle recovery | `7eeca3e0ec` → `e20ebd57ff` | Retain |
+| External-CDP activity leases | `c632658063` + `837340e9be` + `996bbd5d09` + `266cdb4f9e` → `fe809a042c` + `078fdce7ba` + `0ccb499852` + `ddabcdc8ef` | Adapt; preserve upstream scope/authorization |
+| Canonical ancestry advisory | `ad345d8639` → `a9dda1b8ff` | Retain |
+| External-memory structured notice bridge | `deec5144f1` + `f26abe24ec` → `a83f849157` + `fc22c3d4e5` | Retain |
+| Doctor retirement documentation | `8318e5a98b` → `de330b0b18` | Retain |
+| Hindsight checkout hygiene | `1d0b48f427` + `f07904a942` → `21b83877a5` + `7c232e9303` | Retain |
+| Implicit CLI memory workspace | `680d8ffb8e` → `d6d1ec1717` | Retain |
+| Exact approval public display context | `f62342fac0` → `9f3bed3977` | Adapt; preserve upstream scope/authorization |
+| Linux ownership across clock steps | `0a6c1731b7` → `9e3b76c32e` | Retain |
+| Acknowledged SSH sync progress | `f8c5506019` → `f6febd69a7` | Retain |
+| ACP explicit editor close | `8c61935a29` → `68974a1d79` | Retain |
+| Gated cron ghost-session lifecycle | `d3ef5ff94b` → `331a6741dc` | Retain |
+| Mounted TUI conversation on reconnect | `3ca6298238` → `bee6161b04` | Retain |
+| Profile-bound early Slack plugin selection | `9c43814849` → `db437d79b4` | Adapt; preserve upstream scope/authorization |
+
+Every active ref above is listed in the [current report](reports/2026-11-15-upstream-reconciliation.md).
+
+## Historical receipts — November 14 and earlier
+
 ## November 14 approved local integration — activation pending
 
 Peter approved local fast-forward integration into `peter/hermes-patches`, including this catalogue update. Fork publication is reserved for Peter using `kidroca`. No gateway restart or plugin activation is included; source on disk is not evidence of a running gateway loading it.

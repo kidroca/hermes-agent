@@ -1,5 +1,7 @@
 # 2026-11-09 upstream reconciliation
 
+> Historical receipt: current active refs and verification are in [November 15 reconciliation](2026-11-15-upstream-reconciliation.md). Original SHAs and deployment claims below describe their dated checkpoints.
+
 - Date: 2026-11-09
 - Candidate branch: `update/hermes-patches-20261109`
 - Reviewed source snapshot: `370cf2cc67a81270d7fed9bd4f90d96bbc7ea14c`; a later catalogue-only commit may follow.
