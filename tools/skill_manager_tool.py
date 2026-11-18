@@ -12,6 +12,7 @@ import hashlib
 import json
 from contextlib import ExitStack, suppress
 import logging
+import os
 import re
 import shutil
 from collections import Counter
@@ -236,9 +237,20 @@ def _resolve_skill_dir(name: str, category: str | None = None) -> Path:
 
 def _iter_skill_dirs(root: Path):
     from agent.skill_utils import is_excluded_skill_path
-    for skill_md in root.rglob("SKILL.md"):
-        if not is_excluded_skill_path(skill_md):
-            yield skill_md.parent
+    seen: set[str] = set()
+    for directory, dirs, files in os.walk(root, followlinks=True):
+        skill_dir = Path(directory)
+        # Excluded aliases must not consume the identity of an allowed path.
+        if is_excluded_skill_path(skill_dir / "SKILL.md"):
+            dirs[:] = []
+            continue
+        resolved = os.path.realpath(directory)
+        if resolved in seen:
+            dirs[:] = []
+            continue
+        seen.add(resolved)
+        if "SKILL.md" in files:
+            yield skill_dir
 
 
 def _read_frontmatter_name(skill_md: Path) -> Optional[str]:
