@@ -84,6 +84,26 @@ def test_success_resets_the_failure_streak(tmp_path, clock):
     assert upload.call_count == 5, "a fresh single failure retries immediately again"
 
 
+def test_failed_forced_syncs_count_toward_the_streak(tmp_path, clock):
+    upload = MagicMock(side_effect=RuntimeError("down"))
+    mgr = _manager(tmp_path, upload)
+    mgr.sync(force=True)
+    mgr.sync(force=True)
+    clock["t"] += 10
+    mgr.sync()
+    assert upload.call_count == 2, "two failures in a row (forced or not) start the backoff"
+
+
+def test_force_env_bypasses_backoff(tmp_path, clock, monkeypatch):
+    upload = MagicMock()
+    mgr = _manager(tmp_path, upload)
+    _fail_twice(mgr, upload, clock)
+    monkeypatch.setenv(file_sync._FORCE_SYNC_ENV, "1")
+    clock["t"] += 1
+    mgr.sync()
+    assert upload.call_count == 3
+
+
 def test_force_bypasses_backoff(tmp_path, clock):
     upload = MagicMock()
     mgr = _manager(tmp_path, upload)
