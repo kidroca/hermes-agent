@@ -59,6 +59,7 @@ _SYNC_BACK_MAX_RETRIES = 3
 _SYNC_BACK_BACKOFF = (2, 4, 8)  # seconds between retries
 _SYNC_BACK_MAX_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB — refuse to extract larger tars
 _SYNC_BACK_MAX_BYTES_KEY = "sync_back_max_bytes"  # config.yaml terminal.<key>
+_SYNC_BACK_KEY = "sync_back"  # config.yaml terminal.<key>; false skips the teardown download
 _SYNC_BACK_TEMP_PREFIX = "hermes-sync-back-"
 # A sync-back temp entry (the downloaded tar or the extraction staging dir) is only leaked by
 # a hard kill (SIGKILL/OOM/power loss — the ``finally`` never runs). Entry names embed the
@@ -81,6 +82,15 @@ def _sync_back_max_bytes() -> int:
         except (TypeError, ValueError):
             logger.warning("sync_back: ignoring non-integer terminal.%s=%r", _SYNC_BACK_MAX_BYTES_KEY, raw)
     return _SYNC_BACK_MAX_BYTES
+
+
+def _sync_back_enabled() -> bool:
+    """``terminal.sync_back: false`` opts out of the teardown download, e.g. for a persistent
+    SSH host whose files survive the session anyway."""
+    from hermes_cli.config import load_config
+    from utils import is_truthy_value
+
+    return is_truthy_value(((load_config() or {}).get("terminal") or {}).get(_SYNC_BACK_KEY), default=True)
 
 
 def _sync_back_temp_prefix() -> str:
@@ -357,6 +367,9 @@ class FileSyncManager:
         # to avoid retry storms against an uninitialized remote .hermes/.
         if not self._pushed_hashes and not self._synced_files:
             logger.debug("sync_back: no prior push state — skipping")
+            return
+        if not _sync_back_enabled():
+            logger.info("sync_back: disabled by terminal.%s", _SYNC_BACK_KEY)
             return
 
         lock_path = (hermes_home or get_hermes_home()) / ".sync.lock"
