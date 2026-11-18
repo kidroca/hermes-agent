@@ -40,6 +40,10 @@ _sleep = time.sleep
 _monotonic = time.monotonic
 
 _SYNC_INTERVAL_SECONDS = 5.0
+# A single failure retries on the next cycle (#39945); from the second consecutive failure on,
+# back off so a degraded link does not re-run the whole transfer before every command.
+_FAILURE_BACKOFF_BASE_SECONDS = 30.0
+_FAILURE_BACKOFF_MAX_SECONDS = 300.0
 _FORCE_SYNC_ENV = "HERMES_FORCE_FILE_SYNC"
 # Synced-state key no stat result equals (see _plan_sync): forces a content check next sync.
 _RACY_SYNC_KEY = (-1, -1, -1, -1)
@@ -219,6 +223,8 @@ class FileSyncManager:
         self._upload_only_host_paths: set[str] = set()
         self._last_sync_time: float = 0.0  # monotonic; 0 ensures first sync runs
         self._sync_interval = sync_interval
+        self._failure_streak = 0
+        self._retry_after: float = 0.0  # monotonic; non-forced cycles before this are skipped
 
     def sync(self, *, force: bool = False) -> None:
         """Run a sync cycle: upload changed files, delete removed files. Rate-limited to once
@@ -230,10 +236,9 @@ class FileSyncManager:
 
     def _sync_transaction(self, *, force: bool = False) -> None:
         """Execute one sync cycle while holding the per-manager lock."""
-        if (
-            not force
-            and not os.environ.get(_FORCE_SYNC_ENV)
-            and _monotonic() - self._last_sync_time < self._sync_interval):
+        if not force and not os.environ.get(_FORCE_SYNC_ENV) and (
+            _monotonic() - self._last_sync_time < self._sync_interval
+            or _monotonic() < self._retry_after):
             return
 
         try:
@@ -258,10 +263,20 @@ class FileSyncManager:
                     self._synced_files.pop(remote_path, None)
                     self._pushed_hashes.pop(remote_path, None)
             self._last_sync_time = _monotonic()
+            self._failure_streak = 0
+            self._retry_after = 0.0
         except Exception as exc:
             # Successful calls describe real remote progress. Keep their checkpoints,
             # but do not rate-limit a retry of the unconfirmed remainder.
-            logger.warning("file_sync: sync failed, retaining confirmed progress: %s", exc, exc_info=True)
+            self._failure_streak += 1
+            backoff = 0.0
+            if self._failure_streak > 1:
+                backoff = min(_FAILURE_BACKOFF_MAX_SECONDS,
+                              _FAILURE_BACKOFF_BASE_SECONDS * 2 ** (self._failure_streak - 2))
+                self._retry_after = _monotonic() + backoff
+            logger.warning("file_sync: sync failed (%d in a row), retaining confirmed progress; next retry %s: %s",
+                           self._failure_streak, f"in {backoff:.0f}s" if backoff else "next cycle", exc,
+                           exc_info=True)
 
     def _upload_batches(self, files: list[tuple[str, str]]) -> Iterator[list[tuple[str, str]]]:
         """Bound staging and each acknowledged transport call; oversized files stand alone."""
