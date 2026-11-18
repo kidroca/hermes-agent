@@ -245,6 +245,9 @@ class FileSyncManager:
         # bytes the remote already holds instead of re-uploading the whole tree.
         self._remote_hashes_fn = remote_hashes_fn
         self._remote_hashes: dict[str, str] | None = None  # remote_path -> sha256; loaded once
+        # Resolved now, in the creating turn's profile: the gateway switches HERMES_HOME per turn,
+        # and teardown runs on the idle-cleanup thread, where load_config() is the default profile's.
+        self._sync_back_enabled = _sync_back_enabled()
 
     def sync(self, *, force: bool = False) -> None:
         """Run a sync cycle: upload changed files, delete removed files. Rate-limited to once
@@ -391,7 +394,7 @@ class FileSyncManager:
         """Execute sync-back (with retries) against a stable snapshot of manager state."""
         if self._bulk_download_fn is None:
             return
-        if not _sync_back_enabled():
+        if not self._sync_back_enabled:
             logger.info("sync_back: disabled by terminal.%s", _SYNC_BACK_KEY)
             return
 

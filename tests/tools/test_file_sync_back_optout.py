@@ -1,6 +1,10 @@
 """``terminal.sync_back: false`` skips the teardown download (a persistent SSH host keeps
-its files; the whole remote tree was downloaded to apply a handful of changes)."""
+its files; the whole remote tree was downloaded to apply a handful of changes).
 
+The setting is read when the manager is created. The gateway serves profiles by switching
+HERMES_HOME per turn, and teardown runs on the idle-cleanup thread outside any turn, where
+``load_config()`` would return the default profile's config instead of the session's.
+"""
 
 import tarfile
 from unittest.mock import MagicMock
@@ -22,39 +26,59 @@ def _files(tmp_path, **contents):
     return pairs
 
 
-@pytest.fixture
-def pushed_manager(tmp_path):
-    def download(dest):
-        with tarfile.open(dest, "w"):
-            pass
+def _download(dest):
+    with tarfile.open(dest, "w"):
+        pass
 
-    pairs = _files(tmp_path, a="a")
-    mgr = FileSyncManager(lambda: pairs, MagicMock(), MagicMock(), bulk_upload_fn=MagicMock(),
-                          bulk_download_fn=MagicMock(side_effect=download))
-    mgr.sync(force=True)
-    return mgr
+
+@pytest.fixture
+def make_pushed_manager(tmp_path):
+    def make():
+        pairs = _files(tmp_path, a="a")
+        mgr = FileSyncManager(lambda: pairs, MagicMock(), MagicMock(), bulk_upload_fn=MagicMock(),
+                              bulk_download_fn=MagicMock(side_effect=_download))
+        mgr.sync(force=True)
+        return mgr
+
+    return make
+
+
+def _config(monkeypatch, terminal):
+    monkeypatch.setattr(hermes_config, "load_config", lambda: {"terminal": terminal})
 
 
 @pytest.mark.parametrize("value", [False, "false", "off", 0])
-def test_sync_back_can_be_disabled(pushed_manager, monkeypatch, tmp_path, value):
-    monkeypatch.setattr(hermes_config, "load_config", lambda: {"terminal": {"sync_back": value}})
-    pushed_manager.sync_back(hermes_home=tmp_path)
-    pushed_manager._bulk_download_fn.assert_not_called()
+def test_sync_back_can_be_disabled(make_pushed_manager, monkeypatch, tmp_path, value):
+    _config(monkeypatch, {"sync_back": value})
+    mgr = make_pushed_manager()
+    mgr.sync_back(hermes_home=tmp_path)
+    mgr._bulk_download_fn.assert_not_called()
 
 
 @pytest.mark.parametrize("terminal", [{}, {"sync_back": True}, {"sync_back": None}])
-def test_sync_back_stays_on_by_default(pushed_manager, monkeypatch, tmp_path, terminal):
-    monkeypatch.setattr(hermes_config, "load_config", lambda: {"terminal": terminal})
-    pushed_manager.sync_back(hermes_home=tmp_path)
-    pushed_manager._bulk_download_fn.assert_called_once()
+def test_sync_back_stays_on_by_default(make_pushed_manager, monkeypatch, tmp_path, terminal):
+    _config(monkeypatch, terminal)
+    mgr = make_pushed_manager()
+    mgr.sync_back(hermes_home=tmp_path)
+    mgr._bulk_download_fn.assert_called_once()
 
 
-def test_unreadable_config_keeps_sync_back_on(pushed_manager, monkeypatch, tmp_path):
+def test_setting_is_taken_from_the_creating_profile_not_the_teardown_context(
+        make_pushed_manager, monkeypatch, tmp_path):
+    _config(monkeypatch, {"sync_back": False})   # lad-studio turn creates the environment
+    mgr = make_pushed_manager()
+    _config(monkeypatch, {})                     # cleanup thread sees the default profile
+    mgr.sync_back(hermes_home=tmp_path)
+    mgr._bulk_download_fn.assert_not_called()
+
+
+def test_unreadable_config_keeps_sync_back_on(make_pushed_manager, monkeypatch, tmp_path):
     def broken():
         raise ValueError("bad yaml")
 
     monkeypatch.setattr(hermes_config, "load_config", broken)
     monkeypatch.setattr(file_sync.time, "sleep", lambda s: None)
-    pushed_manager.sync_back(hermes_home=tmp_path)
+    mgr = make_pushed_manager()
+    mgr.sync_back(hermes_home=tmp_path)
     # Still attempted (the extraction cap read also fails here and drives the existing retries).
-    pushed_manager._bulk_download_fn.assert_called()
+    mgr._bulk_download_fn.assert_called()
