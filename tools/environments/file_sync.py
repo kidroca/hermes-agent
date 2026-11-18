@@ -90,7 +90,12 @@ def _sync_back_enabled() -> bool:
     from hermes_cli.config import load_config
     from utils import is_truthy_value
 
-    return is_truthy_value(((load_config() or {}).get("terminal") or {}).get(_SYNC_BACK_KEY), default=True)
+    try:
+        raw = ((load_config() or {}).get("terminal") or {}).get(_SYNC_BACK_KEY)
+    except Exception as exc:  # an unreadable config must not silently drop remote changes
+        logger.warning("sync_back: config unreadable, keeping sync-back on: %s", exc)
+        return True
+    return is_truthy_value(raw, default=True)
 
 
 def _sync_back_temp_prefix() -> str:

@@ -9,6 +9,7 @@ import pytest
 
 import hermes_cli.config as hermes_config
 
+from tools.environments import file_sync
 from tools.environments.file_sync import FileSyncManager
 
 
@@ -46,3 +47,14 @@ def test_sync_back_stays_on_by_default(pushed_manager, monkeypatch, tmp_path, te
     monkeypatch.setattr(hermes_config, "load_config", lambda: {"terminal": terminal})
     pushed_manager.sync_back(hermes_home=tmp_path)
     pushed_manager._bulk_download_fn.assert_called_once()
+
+
+def test_unreadable_config_keeps_sync_back_on(pushed_manager, monkeypatch, tmp_path):
+    def broken():
+        raise ValueError("bad yaml")
+
+    monkeypatch.setattr(hermes_config, "load_config", broken)
+    monkeypatch.setattr(file_sync.time, "sleep", lambda s: None)
+    pushed_manager.sync_back(hermes_home=tmp_path)
+    # Still attempted (the extraction cap read also fails here and drives the existing retries).
+    pushed_manager._bulk_download_fn.assert_called()
