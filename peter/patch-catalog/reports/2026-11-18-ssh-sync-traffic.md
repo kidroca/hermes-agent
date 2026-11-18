@@ -2,7 +2,7 @@
 
 - Date: 2026-11-18
 - Repo: `/opt/hermes-agent` (Peter's fork)
-- Patch refs: `cbaa49a50d` `1618f6eb73` `dca9c5dfaf` `e41f74bc71` `bd2fd93d6e` `0bfecd9cab`
+- Patch refs: `cbaa49a50d` `1618f6eb73` `dca9c5dfaf` `e41f74bc71` `bd2fd93d6e` `0bfecd9cab` `32be5d0450`
 - Base: `peter/hermes-patches` @ `46d3526184`; candidate branch `peter/ssh-sync-scope`
 - Follows: [SSH flaky-link resilience](2026-11-18-ssh-flaky-link-resilience.md) (Phase 2 of that plan)
 - Disposition: local patch; upstream publication not requested
@@ -30,7 +30,7 @@ assumption that they are unused).
 
 | Commit | Behaviour |
 |---|---|
-| `cbaa49a50d` + `e41f74bc71` | `terminal.sync_back` (default `true`); `false` skips the teardown download. An unreadable config keeps it on. Docs warn not to disable it on Modal/Daytona. |
+| `cbaa49a50d` + `e41f74bc71` + `32be5d0450` | `terminal.sync_back` (default `true`); `false` skips the teardown download. An unreadable config keeps it on. Docs warn not to disable it on Modal/Daytona. |
 | `1618f6eb73` + `bd2fd93d6e` + `0bfecd9cab` | `FileSyncManager(remote_hashes_fn=…)`: one remote SHA-256 listing per manager, used for the first planning cycle only (cleared even if planning fails). A remote file whose bytes equal the host's is recorded as pushed and not uploaded. SSH lists only the synced roots (two levels under `cache/`) with one `sh -c` call (sha256sum or macOS shasum, NUL-safe find/xargs, 30 s timeout). A failed listing logs once and falls back to a full upload. |
 | `dca9c5dfaf` + `bd2fd93d6e` + `0bfecd9cab` | gzip on the tar upload stream, only once the listing has shown `gzip` on the remote; otherwise the original uncompressed command. The upload deadline still scales with uncompressed bytes. |
 
@@ -59,6 +59,18 @@ Peter's lad-studio profile sets `terminal.sync_back: false`.
 - Two independent reviews. The first raised the gzip fallback, stale-listing and listing-scope
   issues, an unreadable config, and the sandbox warning. The final review found no blockers;
   its notes on failed planning and out-of-base paths are fixed in `0bfecd9cab`.
+
+## Post-deployment fix (`32be5d0450`)
+
+The first live gateway run after the restart still downloaded the whole tree: stall capture
+`20261118T181706Z` was a child of the restarted gateway. The gateway's process HERMES_HOME is the
+default profile, and each turn binds its profile in a ContextVar. Tools inherit that binding via
+`copy_context`, but teardown runs on the idle-cleanup thread with no scope, so `load_config()`
+there read the default profile and ignored lad-studio's `sync_back: false`. The pre-merge live
+test ran with lad-studio's HERMES_HOME as the whole process home, so it could not catch this. The
+fix resolves the setting in `FileSyncManager.__init__`, inside the creating turn. A review found
+no blockers. `terminal.sync_back_max_bytes` and the sync-back lock path still resolve at teardown
+(pre-existing upstream behaviour with the same cross-profile limitation); left as is.
 
 ## Upstream overlap
 
