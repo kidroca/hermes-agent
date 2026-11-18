@@ -216,7 +216,8 @@ class FileSyncManager:
         bulk_upload_fn: BulkUploadFn | None = None,
         bulk_download_fn: BulkDownloadFn | None = None,
         upload_batch_max_files: int | None = None,
-        upload_batch_max_bytes: int | None = None):
+        upload_batch_max_bytes: int | None = None,
+        remote_hashes_fn: Callable[[], dict[str, str]] | None = None):
         for limit in (upload_batch_max_files, upload_batch_max_bytes):
             if limit is not None and limit <= 0:
                 raise ValueError("sync batch limits must be positive")
@@ -235,6 +236,10 @@ class FileSyncManager:
         self._sync_interval = sync_interval
         self._failure_streak = 0
         self._retry_after: float = 0.0  # monotonic; non-forced cycles before this are skipped
+        # Persistent remotes keep files across sessions; one listing lets a new manager skip
+        # bytes the remote already holds instead of re-uploading the whole tree.
+        self._remote_hashes_fn = remote_hashes_fn
+        self._remote_hashes: dict[str, str] | None = None  # remote_path -> sha256; loaded once
 
     def sync(self, *, force: bool = False) -> None:
         """Run a sync cycle: upload changed files, delete removed files. Rate-limited to once
@@ -254,6 +259,7 @@ class FileSyncManager:
         try:
             current_files = self._get_files_fn()
             self._upload_only_host_paths.update(_credential_host_paths())
+            self._load_remote_hashes()
             # Planning reads files too (content check against the pushed hash): a file removed
             # or unreadable after its stat fails the cycle here like a staging read, so the
             # caller's command still runs and the next cycle retries.
@@ -287,6 +293,15 @@ class FileSyncManager:
             logger.warning("file_sync: sync failed (%d in a row), retaining confirmed progress; next retry %s: %s",
                            self._failure_streak, f"in {backoff:.0f}s" if backoff else "next cycle", exc,
                            exc_info=True)
+
+    def _load_remote_hashes(self) -> None:
+        if self._remote_hashes is not None or self._remote_hashes_fn is None:
+            return
+        try:
+            self._remote_hashes = dict(self._remote_hashes_fn())
+        except Exception as exc:  # an optimisation only: never fail or retry the sync over it
+            self._remote_hashes = {}
+            logger.warning("file_sync: remote hash listing failed, uploading every file: %s", exc)
 
     def _upload_batches(self, files: list[tuple[str, str]]) -> Iterator[list[tuple[str, str]]]:
         """Bound staging and each acknowledged transport call; oversized files stand alone."""
@@ -343,7 +358,11 @@ class FileSyncManager:
             recorded_key = _RACY_SYNC_KEY if mtime_is_racy(file_key[0]) else file_key
             new_files[remote_path] = recorded_key
             pushed_hash = self._pushed_hashes.get(remote_path)
-            if pushed_hash is not None and _sha256_file(host_path) == pushed_hash:
+            listed_hash = None if pushed_hash is not None else (self._remote_hashes or {}).pop(remote_path, None)
+            expected = pushed_hash if pushed_hash is not None else listed_hash
+            if expected is not None and _sha256_file(host_path) == expected:
+                if listed_hash is not None:  # identical bytes already there: as good as pushed
+                    self._pushed_hashes[remote_path] = listed_hash
                 continue  # the remote already holds these bytes
             to_upload.append((host_path, remote_path))
         current_remote_paths = {remote for _, remote in current_files}
@@ -362,14 +381,14 @@ class FileSyncManager:
         """Execute sync-back (with retries) against a stable snapshot of manager state."""
         if self._bulk_download_fn is None:
             return
+        if not _sync_back_enabled():
+            logger.info("sync_back: disabled by terminal.%s", _SYNC_BACK_KEY)
+            return
 
         # Nothing was ever committed (initial push failed or never ran): skip
         # to avoid retry storms against an uninitialized remote .hermes/.
         if not self._pushed_hashes and not self._synced_files:
             logger.debug("sync_back: no prior push state — skipping")
-            return
-        if not _sync_back_enabled():
-            logger.info("sync_back: disabled by terminal.%s", _SYNC_BACK_KEY)
             return
 
         lock_path = (hermes_home or get_hermes_home()) / ".sync.lock"

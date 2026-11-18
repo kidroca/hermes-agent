@@ -94,6 +94,22 @@ def _open_control_dir() -> tuple[Path, bool]:
     return Path(tempfile.mkdtemp(prefix="hssh-", dir=min(roots, key=len))), True
 
 
+def _parse_remote_hashes(output: bytes, base: str) -> dict[str, str]:
+    """``<sha256>  ./<path>`` lines -> ``{base/path: sha256}``. Escaped names (a leading ``\\``
+    marks a backslash or newline in the name) and anything unparsable are skipped: such a
+    file simply gets uploaded."""
+    hashes = {}
+    for line in output.decode(errors="surrogateescape").splitlines():
+        digest, sep, name = line.partition("  ")
+        if not sep:
+            digest, sep, name = line.partition(" *")  # shasum/sha256sum binary-mode marker
+        if (not sep or len(digest) != 64 or not name.startswith("./")
+                or any(c not in "0123456789abcdef" for c in digest)):
+            continue
+        hashes[f"{base}/{name[2:]}"] = digest
+    return hashes
+
+
 def _remote_sync_relative_path(remote_path: str, base: str) -> str:
     """Return a safe POSIX archive member path beneath the remote sync base."""
     try:
@@ -188,7 +204,8 @@ class SSHEnvironment(BaseEnvironment):
                 get_files_fn=lambda: iter_sync_files(f"{self._remote_home}/.hermes"),
                 upload_fn=self._scp_upload, delete_fn=self._ssh_delete,
                 bulk_upload_fn=self._ssh_bulk_upload, bulk_download_fn=self._ssh_bulk_download,
-                upload_batch_max_files=256, upload_batch_max_bytes=16 * 1024 * 1024)
+                upload_batch_max_files=256, upload_batch_max_bytes=16 * 1024 * 1024,
+                remote_hashes_fn=self._ssh_remote_hashes)
             self._sync_manager.sync(force=True)
         self.init_session()
 
@@ -390,6 +407,25 @@ class SSHEnvironment(BaseEnvironment):
                                   f"{ssh_stderr.decode(errors='replace').strip()}",
                                   f"File sync over SSH to {self.host}", what="the connection")
         logger.debug("SSH: bulk-uploaded %d file(s) via tar pipe", len(files))
+
+    @staticmethod
+    def _remote_hash_script(base: str) -> str:
+        """POSIX sh listing ``<sha256>  ./<path>`` for every regular file under *base* (GNU
+        coreutils or macOS ``shasum``); prints nothing when the tree does not exist yet."""
+        return (f"cd {shlex.quote(base)} 2>/dev/null || exit 0; "
+                "if command -v sha256sum >/dev/null 2>&1; then h=sha256sum; else h='shasum -a 256'; fi; "
+                "find . -type f ! -name '*.sock' -print0 | xargs -0 $h")
+
+    def _ssh_remote_hashes(self) -> dict[str, str]:
+        """Hashes of the files the remote ``~/.hermes`` already holds, keyed like sync paths."""
+        base = f"{self._remote_home}/.hermes"
+        # sh -c: the remote login shell may be zsh, which does not word-split an unquoted $h.
+        cmd = self._build_ssh_command() + [f"sh -c {shlex.quote(self._remote_hash_script(base))}"]
+        result = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=60, check=False)
+        if result.returncode == 255:  # ssh itself failed; xargs/find statuses still list the rest
+            raise _sync_error(f"remote hash listing failed: {result.stderr.decode(errors='replace').strip()}",
+                              f"File sync listing on {self.host}")
+        return _parse_remote_hashes(result.stdout, base)
 
     def _ssh_bulk_download(self, dest: Path) -> None:
         """Download remote .hermes/ as a tar archive."""
