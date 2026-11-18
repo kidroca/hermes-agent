@@ -312,6 +312,7 @@ class SSHEnvironment(BaseEnvironment):
             validated_files.append((host_path, posixpath.join(base, relative), relative))
 
         upload_bytes = sum(os.path.getsize(host) for host, _ in files)
+        gzip = getattr(self, "_remote_gzip", False)  # unproven (no listing yet) -> uncompressed
         # Symlink staging avoids fragile GNU tar --transform rules. Archive
         # only explicit file entries instead of the staging root, otherwise
         # remote tar sees parent directory headers like `.` and may fail while
@@ -350,7 +351,7 @@ class SSHEnvironment(BaseEnvironment):
                 manifest.writelines(os.fsencode(entry) + b"\0" for entry in tar_entries)
 
             tar_cmd = [
-                "tar", "--no-xattrs", "-czhf" if self._remote_gzip else "-chf", "-",
+                "tar", "--no-xattrs", "-czhf" if gzip else "-chf", "-",
                 "-C", staging, "--null", "-T", manifest_path,
             ]
             ssh_cmd = self._build_ssh_command()
@@ -358,7 +359,7 @@ class SSHEnvironment(BaseEnvironment):
             # extraction cannot overwrite metadata of existing parent dirs. gzip (only once the
             # listing proved the remote has it): the support tree is mostly text, and a mux client
             # cannot enable ssh -C on an existing master.
-            ssh_cmd.append(f"tar x{'z' if self._remote_gzip else ''}f - -C {shlex.quote(base)}")
+            ssh_cmd.append(f"tar x{'z' if gzip else ''}f - -C {shlex.quote(base)}")
 
             # Preserve the caller's environment for the local tar process while
             # routing through the shared spawn-env guard. SSH sync may need
@@ -430,6 +431,8 @@ class SSHEnvironment(BaseEnvironment):
         base = f"{self._remote_home}/.hermes"
         roots = set()
         for _, remote_path in iter_sync_files(base):
+            if not remote_path.startswith(base + "/"):
+                continue
             parts = remote_path[len(base) + 1:].split("/")
             depth = 2 if parts[0] == "cache" and len(parts) > 2 else 1
             if len(parts) > depth:

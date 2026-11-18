@@ -268,10 +268,12 @@ class FileSyncManager:
             # Planning reads files too (content check against the pushed hash): a file removed
             # or unreadable after its stat fails the cycle here like a staging read, so the
             # caller's command still runs and the next cycle retries.
-            to_upload, new_files, to_delete = self._plan_sync(current_files)
-            # The listing describes the remote at session start: a file that first appears later
-            # must not match a remote copy that may have changed since.
-            self._remote_hashes = {}
+            try:
+                to_upload, new_files, to_delete = self._plan_sync(current_files)
+            finally:
+                # The listing describes the remote at session start: a later cycle (even a retry
+                # of a failed plan) must not match a remote copy that may have changed since.
+                self._remote_hashes = {}
             # Keys whose bytes the remote already holds are confirmed without a transfer.
             uploading = {remote for _, remote in to_upload}
             self._synced_files.update(

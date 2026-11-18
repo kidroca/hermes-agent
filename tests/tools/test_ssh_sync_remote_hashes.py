@@ -179,3 +179,31 @@ def test_listing_applies_to_the_first_cycle_only(tmp_path):
     pairs.append((str(late), "/remote/.hermes/late"))  # appears on the host later
     mgr.sync(force=True)
     assert "/remote/.hermes/late" in _uploaded(bulk)
+
+
+def test_listing_is_dropped_even_when_first_planning_fails(tmp_path, monkeypatch):
+    pairs = _files(tmp_path, a="a")
+    listing = {"/remote/.hermes/a": _sha(b"a")}
+    bulk = MagicMock()
+    mgr = FileSyncManager(lambda: pairs, MagicMock(), MagicMock(), bulk_upload_fn=bulk,
+                          remote_hashes_fn=lambda: dict(listing))
+    real_plan = mgr._plan_sync
+    calls = {"n": 0}
+
+    def flaky_plan(files):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError("host file vanished mid-plan")
+        return real_plan(files)
+
+    monkeypatch.setattr(mgr, "_plan_sync", flaky_plan)
+    mgr.sync(force=True)
+    mgr.sync(force=True)
+    assert _uploaded(bulk) == ["/remote/.hermes/a"], "a retry must not trust the session-start listing"
+
+
+def test_sync_roots_ignore_paths_outside_the_base(env, monkeypatch):
+    base = "/Users/u/.hermes"
+    monkeypatch.setattr(ssh_env, "iter_sync_files", lambda b: [
+        ("/h/1", f"{base}/skills/x.md"), ("/h/2", "/elsewhere/file"), ("/h/3", f"{base}-other/x/y")])
+    assert env._sync_roots() == ["skills"]

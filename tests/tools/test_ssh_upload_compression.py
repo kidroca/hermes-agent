@@ -50,3 +50,20 @@ def test_ssh_upload_is_compressed_only_when_the_remote_has_gzip(env, tmp_path, m
     tar_cmd, ssh_cmd = popen_cmds
     assert ("-czhf" if gzip_ok else "-chf") in tar_cmd
     assert ssh_cmd[-1] == f"tar x{'z' if gzip_ok else ''}f - -C /Users/u/.hermes"
+
+
+def test_upload_without_a_listing_state_stays_uncompressed(tmp_path, monkeypatch):
+    env = ssh_env.SSHEnvironment.__new__(ssh_env.SSHEnvironment)  # no __init__: no gzip proof
+    env._remote_home, env.host = "/home/t", "t"
+    env._run_ssh_checked = MagicMock()
+    env._build_ssh_command = lambda: ["ssh", "t"]
+    host = tmp_path / "f"
+    host.write_bytes(b"x")
+    procs = [MagicMock(returncode=0), MagicMock(returncode=0)]
+    procs[0].poll.return_value = 0
+    procs[0].stderr.read.return_value = b""
+    procs[1].communicate.return_value = (b"", b"")
+    popen = MagicMock(side_effect=procs)
+    monkeypatch.setattr(ssh_env.subprocess, "Popen", popen)
+    env._ssh_bulk_upload([(str(host), "/home/t/.hermes/cache/f")])
+    assert popen.call_args_list[1].args[0][-1] == "tar xf - -C /home/t/.hermes"
