@@ -269,6 +269,9 @@ class FileSyncManager:
             # or unreadable after its stat fails the cycle here like a staging read, so the
             # caller's command still runs and the next cycle retries.
             to_upload, new_files, to_delete = self._plan_sync(current_files)
+            # The listing describes the remote at session start: a file that first appears later
+            # must not match a remote copy that may have changed since.
+            self._remote_hashes = {}
             # Keys whose bytes the remote already holds are confirmed without a transfer.
             uploading = {remote for _, remote in to_upload}
             self._synced_files.update(

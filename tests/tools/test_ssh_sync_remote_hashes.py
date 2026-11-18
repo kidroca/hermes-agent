@@ -101,7 +101,9 @@ def test_ssh_remote_listing_parses_hash_output(env, monkeypatch):
               f"{other}  ./cache/web/page one.md\n"
               f"\\{good}  ./odd\\nname\n"         # escaped name (backslash/newline): skip
               f"{good}  -\n"                      # empty xargs run hashing stdin: skip
-              f"nothex  ./bogus\n").encode()
+              f"nothex  ./bogus\n"
+              f"{other} *./bin/mode.sh\n"              # binary-mode marker
+              "HERMES_GZIP_OK\n").encode()
     calls = []
 
     def run(cmd, **kw):
@@ -112,7 +114,9 @@ def test_ssh_remote_listing_parses_hash_output(env, monkeypatch):
     assert env._ssh_remote_hashes() == {
         "/Users/u/.hermes/skills/x/SKILL.md": good,
         "/Users/u/.hermes/cache/web/page one.md": other,
+        "/Users/u/.hermes/bin/mode.sh": other,
     }
+    assert env._remote_gzip is True
     cmd, kw = calls[0]
     assert cmd[-1].startswith("sh -c ")  # never rely on the remote login shell's word splitting
     assert kw["stdin"] is subprocess.DEVNULL and kw["timeout"] > 0
@@ -131,13 +135,47 @@ def test_ssh_remote_listing_script_runs_under_sh(env, tmp_path):
     (base / "skills").mkdir(parents=True)
     (base / "skills" / "a.md").write_bytes(b"alpha")
     (base / "with space.md").write_bytes(b"beta")
-    script = env._remote_hash_script(str(base))
+    (base / "sessions").mkdir()
+    (base / "sessions" / "big.jsonl").write_bytes(b"not synced")  # outside the synced roots
+    (base / "cache" / "web").mkdir(parents=True)
+    (base / "cache" / "web" / "with space.md").write_bytes(b"beta")
+    script = env._remote_hash_script(str(base), ["skills", "cache/web", "attachments"])  # last absent
     out = subprocess.run(["sh", "-c", script], capture_output=True, check=False).stdout
     parsed = ssh_env._parse_remote_hashes(out, str(base))
-    assert parsed == {f"{base}/skills/a.md": _sha(b"alpha"), f"{base}/with space.md": _sha(b"beta")}
+    assert parsed == {f"{base}/skills/a.md": _sha(b"alpha"), f"{base}/cache/web/with space.md": _sha(b"beta")}
+    assert b"HERMES_GZIP_OK" in out  # this test host has gzip
 
 
 def test_ssh_remote_listing_of_a_missing_tree_is_empty(env, tmp_path):
-    script = env._remote_hash_script(str(tmp_path / "absent"))
+    script = env._remote_hash_script(str(tmp_path / "absent"), ["skills"])
     out = subprocess.run(["sh", "-c", script], capture_output=True, check=False)
     assert ssh_env._parse_remote_hashes(out.stdout, str(tmp_path / "absent")) == {}
+
+
+def test_ssh_without_gzip_proof_stays_uncompressed(env, monkeypatch):
+    monkeypatch.setattr(ssh_env.subprocess, "run",
+                        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, b"", b""))
+    env._ssh_remote_hashes()
+    assert env._remote_gzip is False
+
+
+def test_ssh_listing_covers_only_synced_roots(env, monkeypatch):
+    base = "/Users/u/.hermes"
+    monkeypatch.setattr(ssh_env, "iter_sync_files", lambda b: [
+        ("/h/1", f"{base}/skills/x/SKILL.md"), ("/h/2", f"{base}/cache/web/p.md"),
+        ("/h/3", f"{base}/cache/spillover/s.txt"), ("/h/4", f"{base}/skills/y.md")])
+    assert env._sync_roots() == ["cache/spillover", "cache/web", "skills"]
+
+
+def test_listing_applies_to_the_first_cycle_only(tmp_path):
+    pairs = _files(tmp_path, a="a")
+    late = tmp_path / "late"
+    late.write_bytes(b"late")
+    listing = {"/remote/.hermes/late": _sha(b"late")}  # matched only if consulted after cycle 1
+    bulk = MagicMock()
+    mgr = FileSyncManager(lambda: list(pairs), MagicMock(), MagicMock(), bulk_upload_fn=bulk,
+                          remote_hashes_fn=lambda: dict(listing))
+    mgr.sync(force=True)
+    pairs.append((str(late), "/remote/.hermes/late"))  # appears on the host later
+    mgr.sync(force=True)
+    assert "/remote/.hermes/late" in _uploaded(bulk)

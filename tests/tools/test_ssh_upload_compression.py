@@ -28,7 +28,8 @@ def env(monkeypatch):
     return environment
 
 
-def test_ssh_upload_stream_is_gzip_compressed(env, tmp_path, monkeypatch):
+@pytest.mark.parametrize("gzip_ok", [True, False])
+def test_ssh_upload_is_compressed_only_when_the_remote_has_gzip(env, tmp_path, monkeypatch, gzip_ok):
     host = tmp_path / "page.md"
     host.write_bytes(b"x" * 10000)
     popen_cmds = []
@@ -44,7 +45,8 @@ def test_ssh_upload_stream_is_gzip_compressed(env, tmp_path, monkeypatch):
 
     monkeypatch.setattr(ssh_env.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0))
     monkeypatch.setattr(ssh_env.subprocess, "Popen", popen)
+    env._remote_gzip = gzip_ok
     env._ssh_bulk_upload([(str(host), "/Users/u/.hermes/cache/web/page.md")])
     tar_cmd, ssh_cmd = popen_cmds
-    assert "-czhf" in tar_cmd
-    assert ssh_cmd[-1] == "tar xzf - -C /Users/u/.hermes"
+    assert ("-czhf" if gzip_ok else "-chf") in tar_cmd
+    assert ssh_cmd[-1] == f"tar x{'z' if gzip_ok else ''}f - -C /Users/u/.hermes"

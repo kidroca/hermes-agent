@@ -197,6 +197,7 @@ class SSHEnvironment(BaseEnvironment):
         if probe_only:
             return
         self._remote_home_detected = False
+        self._remote_gzip = False  # set by the first remote hash listing
         self._remote_home = self._detect_remote_home()
         if sync_files:
             self._ensure_remote_dirs()
@@ -349,14 +350,15 @@ class SSHEnvironment(BaseEnvironment):
                 manifest.writelines(os.fsencode(entry) + b"\0" for entry in tar_entries)
 
             tar_cmd = [
-                "tar", "--no-xattrs", "-czhf", "-",
+                "tar", "--no-xattrs", "-czhf" if self._remote_gzip else "-chf", "-",
                 "-C", staging, "--null", "-T", manifest_path,
             ]
             ssh_cmd = self._build_ssh_command()
             # The archive contains explicit file entries only, so portable
-            # extraction cannot overwrite metadata of existing parent dirs. gzip: the support tree
-            # is mostly text, and a mux client cannot enable ssh -C on an existing master.
-            ssh_cmd.append(f"tar xzf - -C {shlex.quote(base)}")
+            # extraction cannot overwrite metadata of existing parent dirs. gzip (only once the
+            # listing proved the remote has it): the support tree is mostly text, and a mux client
+            # cannot enable ssh -C on an existing master.
+            ssh_cmd.append(f"tar x{'z' if self._remote_gzip else ''}f - -C {shlex.quote(base)}")
 
             # Preserve the caller's environment for the local tar process while
             # routing through the shared spawn-env guard. SSH sync may need
@@ -410,22 +412,42 @@ class SSHEnvironment(BaseEnvironment):
         logger.debug("SSH: bulk-uploaded %d file(s) via tar pipe", len(files))
 
     @staticmethod
-    def _remote_hash_script(base: str) -> str:
-        """POSIX sh listing ``<sha256>  ./<path>`` for every regular file under *base* (GNU
-        coreutils or macOS ``shasum``); prints nothing when the tree does not exist yet."""
-        return (f"cd {shlex.quote(base)} 2>/dev/null || exit 0; "
+    def _remote_hash_script(base: str, roots: list[str]) -> str:
+        """POSIX sh: ``HERMES_GZIP_OK`` when the remote can gunzip, then ``<sha256>  ./<path>`` for
+        every regular file under the synced *roots* of *base* (GNU coreutils or macOS ``shasum``).
+        Missing roots or a missing tree list nothing."""
+        dirs = " ".join(shlex.quote(f"./{root}") for root in roots)
+        probe = "command -v gzip >/dev/null 2>&1 && echo HERMES_GZIP_OK"
+        if not roots:  # BSD find needs a path; GNU find would default to the whole tree
+            return probe
+        return (f"{probe}; cd {shlex.quote(base)} 2>/dev/null || exit 0; "
                 "if command -v sha256sum >/dev/null 2>&1; then h=sha256sum; else h='shasum -a 256'; fi; "
-                "find . -type f ! -name '*.sock' -print0 | xargs -0 $h")
+                f"find {dirs} -type f ! -name '*.sock' -print0 2>/dev/null | xargs -0 $h")
+
+    def _sync_roots(self) -> list[str]:
+        """Top-level synced dirs (two levels under ``cache/``), so the listing skips remote
+        sessions, logs and caches this host never pushes."""
+        base = f"{self._remote_home}/.hermes"
+        roots = set()
+        for _, remote_path in iter_sync_files(base):
+            parts = remote_path[len(base) + 1:].split("/")
+            depth = 2 if parts[0] == "cache" and len(parts) > 2 else 1
+            if len(parts) > depth:
+                roots.add("/".join(parts[:depth]))
+        return sorted(roots)
 
     def _ssh_remote_hashes(self) -> dict[str, str]:
-        """Hashes of the files the remote ``~/.hermes`` already holds, keyed like sync paths."""
+        """Hashes of the files the remote ``~/.hermes`` already holds, keyed like sync paths; also
+        records whether uploads may be gzip-compressed."""
         base = f"{self._remote_home}/.hermes"
+        roots = self._sync_roots()
         # sh -c: the remote login shell may be zsh, which does not word-split an unquoted $h.
-        cmd = self._build_ssh_command() + [f"sh -c {shlex.quote(self._remote_hash_script(base))}"]
-        result = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=60, check=False)
+        cmd = self._build_ssh_command() + [f"sh -c {shlex.quote(self._remote_hash_script(base, roots))}"]
+        result = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=30, check=False)
         if result.returncode == 255:  # ssh itself failed; xargs/find statuses still list the rest
             raise _sync_error(f"remote hash listing failed: {result.stderr.decode(errors='replace').strip()}",
                               f"File sync listing on {self.host}")
+        self._remote_gzip = b"HERMES_GZIP_OK" in result.stdout.splitlines()
         return _parse_remote_hashes(result.stdout, base)
 
     def _ssh_bulk_download(self, dest: Path) -> None:
