@@ -40,6 +40,7 @@ see the report for exact verification and publication status.
 | Mounted TUI conversation on reconnect | `3ca6298238` → `bee6161b04` | Retain |
 | Profile-bound early Slack plugin selection | `9c43814849` → `db437d79b4` | Adapt; preserve upstream scope/authorization |
 | SSH flaky-link resilience ([report](reports/2026-11-18-ssh-flaky-link-resilience.md)) | new → `a5777682e1` + `f083a4399f` + `bc98ceabd0` + `11ac86fe67` + `7eeaef18f8` + `4a98ab6650` + `e24a97a8cf` | Retain; local-only; watch upstream #62800 |
+| SSH sync traffic ([report](reports/2026-11-18-ssh-sync-traffic.md)) | new → `cbaa49a50d` + `1618f6eb73` + `dca9c5dfaf` + `e41f74bc71` + `bd2fd93d6e` + `0bfecd9cab` | Retain; local-only; rebase with the flaky-link family |
 
 Every active ref above is listed in the [current report](reports/2026-11-15-upstream-reconciliation.md).
 
