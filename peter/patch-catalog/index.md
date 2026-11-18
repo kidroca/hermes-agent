@@ -39,6 +39,7 @@ see the report for exact verification and publication status.
 | Gated cron ghost-session lifecycle | `d3ef5ff94b` → `331a6741dc` | Retain |
 | Mounted TUI conversation on reconnect | `3ca6298238` → `bee6161b04` | Retain |
 | Profile-bound early Slack plugin selection | `9c43814849` → `db437d79b4` | Adapt; preserve upstream scope/authorization |
+| SSH flaky-link resilience ([report](reports/2026-11-18-ssh-flaky-link-resilience.md)) | new → `bda02a6a82` + `af6cc9b1e9` + `c8cd3d4e54` + `9362a57c75` + `9102ba95e1` + `87db5c4cb7` + `1b0980a3d7` | Retain; local-only; watch upstream #62800 |
 
 Every active ref above is listed in the [current report](reports/2026-11-15-upstream-reconciliation.md).
 
