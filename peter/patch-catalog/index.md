@@ -1,15 +1,16 @@
 # Hermes Agent local patch catalogue
 
-## November 18 reviewed addition — candidate only
+## November 18 reviewed addition — locally integrated
 
 This entry does not update or supersede the retained-stack receipt below.
-Source is NOT integrated, deployed or pushed; live Mac source remains `5e367d534b`
-(parent-supplied receipt). Candidate parent/latest fork base is
-`99a14664e4616abc88e66c01aa99477bb66f5a2d`. Integration and activation need separate approval.
+Peter approved local integration after updating the Mac checkout to
+`99a14664e4616abc88e66c01aa99477bb66f5a2d`. The two candidate commits were
+fast-forwarded unchanged into `peter/hermes-patches`; no rebase was needed.
+Fork push is reserved for Peter. No gateway restart or running-process activation is claimed.
 
 | Date | Source ref | Title | Report | Status / upstream risk |
 |---|---|---|---|---|
-| 2026-11-18 | `98b0b285b1d10df6b1dc07ccf681963b1f7d1b0b` | Follow symlinked categories in skill-manager discovery | [Report](reports/2026-11-18-98b0b285b1-skill-manager-symlink-discovery.md) | Reviewed candidate only; independent APPROVE (artifact read), parent focused 5 passed; implementation 915 passed / 1 skipped and 19 checks OK. High direct overlap #156015, medium shared-scanner overlap #143312; merge likelihood unknown. No upstream PR requested. |
+| 2026-11-18 | `98b0b285b1d10df6b1dc07ccf681963b1f7d1b0b` | Follow symlinked categories in skill-manager discovery | [Report](reports/2026-11-18-98b0b285b1-skill-manager-symlink-discovery.md) | Locally integrated; independent APPROVE (artifact read), fresh canonical 915 passed / 1 skipped; candidate 19 checks OK. High direct overlap #156015, medium shared-scanner overlap #143312; merge likelihood unknown. Push reserved for Peter; activation unverified. |
 
 ## November 15 update candidate — authoritative retained stack
 

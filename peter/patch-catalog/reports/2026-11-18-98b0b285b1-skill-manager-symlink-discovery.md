@@ -4,8 +4,8 @@
 - Source / standalone cherry-pick ref: `98b0b285b1d10df6b1dc07ccf681963b1f7d1b0b`.
 - Parent / latest fork base: `99a14664e4616abc88e66c01aa99477bb66f5a2d`.
 - Candidate branch: `fix/skill-manager-symlink-discovery`. Catalogue drafted in a disposable detached checkout at the exact source ref, then verified and transferred by the parent.
-- Local status: reviewed candidate only; NOT integrated, deployed or pushed. Live Mac source remains `5e367d534b` (parent-supplied receipt, not checked here).
-- Scope: personal candidate; no upstream PR requested. Catalogue documentation is committed separately from the source commit.
+- Local status: Peter approved local integration after updating the canonical checkout to `99a14664e4`. Source `98b0b285b1` and candidate catalogue `570ba6b478` were fast-forwarded unchanged into local `peter/hermes-patches`; no rebase was needed. Not pushed; no gateway restart or running-process activation verified.
+- Scope: personal fork integration; Peter retains the push. No upstream PR requested. Catalogue documentation is committed separately from the source commit.
 - Motivation: `skill_view` can find skills behind external category symlinks while manager discovery misses them, preventing in-place management.
 - Production: `tools/skill_manager_tool.py`, +15/-3, one existing file/helper; no new production module.
 - Tests: new `tests/tools/test_skill_manager_symlink_discovery.py`, +140/-0.
@@ -25,6 +25,7 @@ Receipts below are supplied by the parent/implementation agents; this catalogue 
 - Implementation RED: five regression cases failed before the fix.
 - Parent rerun on the candidate: focused five passed.
 - Parent rerun on committed source: 915 passed / 0 failed / 1 skipped across 44 files. Implementation `scripts/check`: 19 OK; source `git diff --check` clean.
+- Fresh integrated canonical checkout: 915 passed / 0 failed / 1 skipped across the same 44 files via `scripts/run_tests.sh -j 4 tests/tools/test_skill*.py tests/agent/test_external_skills*.py tests/agent/test_skill_utils.py tests/agent/test_project_skills.py -q`, with isolated HOME/HERMES_HOME/runtime and the independent test interpreter. Earlier candidate receipts above remain historical, not substitutes for this run.
 - Coverage: directory/frontmatter-name patch lookup, actual in-place target edits, archive-first exclusion ordering, local precedence, excluded support/archive paths, delete refusal and branching-cycle deadline.
 - Symlink regressions are POSIX-marked and executed on macOS; Windows behavior and the full suite were not verified.
 - Independent precommit review: APPROVE, no blockers; artifact-only read, not an independent test execution.
@@ -49,8 +50,8 @@ These are contributor discussion, not formal review or proof of adoption into ma
 
 ## Recommendation
 
-Keep the reviewed source as an unintegrated candidate until Peter separately authorizes integration; preserve the standalone source SHA for later cherry-pick.
-Do not alter the retained-stack history or infer deployment from this report. No source integration, restart, fork push or upstream submission is authorized by catalogue work.
+Retain the reviewed source in local `peter/hermes-patches`; its standalone SHA is unchanged. Local integration is complete; fork push remains Peter's next step.
+Do not alter the retained-stack history or infer loaded-process activation from on-disk integration. No restart, agent-driven fork push or upstream submission was requested.
 On a future rebase, compare #156015 and shared scanner #143312 against the then-current main; replace the local helper only after equivalent exclusion-before-dedup, bounded-cycle, precedence and delete-guard behavior is verified.
 
 ## Raw search queries used
