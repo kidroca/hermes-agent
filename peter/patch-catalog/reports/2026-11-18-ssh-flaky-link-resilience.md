@@ -17,7 +17,7 @@ A gateway restart did not help. Every command first re-ran a ~6.7 MB support-fil
 read triggered the same sync under a 30–60 s deadline ("process-identity probe wedged"), and the
 mux master had no keepalives.
 
-## Changes (production +71/−9 lines in 5 files; tests and docs separate)
+## Changes (production +83/−8 lines in 5 files, comments included; tests and docs separate)
 
 | Commit | Behaviour |
 |---|---|
