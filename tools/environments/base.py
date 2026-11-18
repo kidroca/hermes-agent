@@ -87,6 +87,25 @@ def shell_state_scope(chain: tuple[str, ...]):
         _shell_state_chain.reset(token)
 
 
+_file_sync_suppressed: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "terminal_file_sync_suppressed", default=False)
+
+
+@contextmanager
+def skip_file_sync():
+    """Run ``execute`` calls in this context without the pre-command file sync. Only for internal
+    reads of paths the caller verified with ``may_be_file_synced`` — never for user commands."""
+    token = _file_sync_suppressed.set(True)
+    try:
+        yield
+    finally:
+        _file_sync_suppressed.reset(token)
+
+
+def file_sync_suppressed() -> bool:
+    return _file_sync_suppressed.get()
+
+
 def _enter_foreground_spawn() -> bool:
     global _spawns_in_flight
     with _live_foreground_cond:
@@ -698,6 +717,15 @@ class BaseEnvironment(LongLivedProcessMixin, ABC):
         """Hook before each command. Remote backends (SSH, Modal, Daytona)
         trigger their FileSyncManager here; bind-mount backends and Local don't."""
 
+    def _run_before_execute(self) -> None:
+        if not file_sync_suppressed():
+            self._before_execute()
+
+    def may_be_file_synced(self, path: str) -> bool:
+        """Whether *path* on the backend may be written by this backend's file sync. Conservative
+        default: a backend that cannot answer is assumed to sync everything."""
+        return True
+
     def _mark_recreated(self) -> None:
         """Flag that the live container/sandbox was replaced while serving the
         current command. ``execute`` folds the flag into the result as
@@ -729,7 +757,7 @@ class BaseEnvironment(LongLivedProcessMixin, ABC):
         is drained (head/tail window) instead of holding the full output in memory (#64435).
         See #94285.
         """
-        self._before_execute()
+        self._run_before_execute()
 
         exec_command, sudo_stdin = self._prepare_command(command)
         # Guard against the `A && B &` subshell-wait trap by default; callers

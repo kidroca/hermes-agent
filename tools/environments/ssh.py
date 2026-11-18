@@ -422,6 +422,17 @@ class SSHEnvironment(BaseEnvironment):
         if self._sync_manager is not None:
             self._sync_manager.sync()  # rate-limited internally
 
+    def may_be_file_synced(self, path: str) -> bool:
+        """Sync writes only under the remote ``~/.hermes``. ``~`` paths are ambiguous (the remote
+        shell expands them) and stay conservatively covered."""
+        if self._sync_manager is None:
+            return False
+        if path.startswith("~"):
+            return True
+        resolved = posixpath.normpath(path if posixpath.isabs(path) else posixpath.join(self.cwd, path))
+        root = posixpath.normpath(f"{self._remote_home}/.hermes")
+        return resolved == root or resolved.startswith(root + "/")
+
     def _run_bash(self, cmd_string: str, *, login: bool = False, timeout: int = 120,
                   stdin_data: str | None = None) -> subprocess.Popen:
         """Forward the passthrough allowlist (skill ``required_environment_variables`` +

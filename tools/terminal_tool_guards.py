@@ -9,6 +9,7 @@ module re-imports every public helper so ``tools.terminal_tool.<name>``
 keeps resolving.
 """
 
+import contextlib
 import functools
 import json
 import logging
@@ -548,7 +549,14 @@ def _read_script_for_guard(env: Any, guard_cwd: str, script_path: str, max_bytes
     # byte over budget is enough for lifecycle_guard to fail closed. The
     # `< path` redirect keeps leading-dash paths out of argv.
     try:
-        result = env.execute(f"head -c {max_bytes + 1} < {shlex.quote(script_path)}")
+        # A path the backend's file sync cannot write reads the same without syncing first; on a
+        # degraded link that sync alone could exhaust the whole guard deadline.
+        from tools.environments.base import skip_file_sync
+
+        may_be_synced = getattr(env, "may_be_file_synced", None)
+        skip_sync = callable(may_be_synced) and not may_be_synced(script_path)
+        with skip_file_sync() if skip_sync else contextlib.nullcontext():
+            result = env.execute(f"head -c {max_bytes + 1} < {shlex.quote(script_path)}")
         if result.get("returncode", -1) == 0:
             output = result.get("output", "")
             return None if output and "\x00" in output else output
