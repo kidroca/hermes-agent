@@ -30,6 +30,8 @@ def _ssh_env(remote_home="/Users/u", syncing=True, cwd="/Users/u/work", detected
     ("/Users/u/.hermes/../.hermes/skills/run.sh", True),
     ("/Users/U/.Hermes/skills/run.sh", True),    # case-insensitive volume (macOS default)
     ("/users/u/.HERMES", True),
+    ("//Users/u/.hermes/skills/run.sh", True),   # POSIX keeps '//' in normpath: same file
+    ("///Users/u/.hermes", True),
     ("~/.hermes/skills/run.sh", True),           # ambiguous: stay conservative
     ("~/bin/tool", True),
     ("run.sh", True),                            # relative: guard and read may resolve differently
@@ -46,6 +48,12 @@ def test_ssh_paths_covered_by_file_sync(path, expected):
 def test_unknown_or_guessed_remote_home_counts_as_synced(home, detected):
     env = _ssh_env(remote_home=home, detected=detected)
     assert env.may_be_file_synced("/Users/Shared/AI/runtimes/x/bin/python") is True
+
+
+def test_unicode_normalisation_variants_of_the_home_match():
+    nfd_home = "/Users/Jose\u0301"           # decomposed, as HFS+ stores it
+    env = _ssh_env(remote_home=nfd_home)
+    assert env.may_be_file_synced("/Users/Jos\u00e9/.hermes/skills/run.sh") is True  # composed
 
 
 def test_no_sync_manager_means_nothing_is_synced():

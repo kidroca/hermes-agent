@@ -10,6 +10,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Iterable
 
@@ -433,8 +434,12 @@ class SSHEnvironment(BaseEnvironment):
         # _detect_remote_home falls back to a guessed /home/<user> that need not be the real root.
         if not home or not getattr(self, "_remote_home_detected", False) or not posixpath.isabs(path):
             return True
-        resolved = posixpath.normpath(path).casefold()
-        root = posixpath.normpath(f"{home}/.hermes").casefold()
+        def canonical(p: str) -> str:
+            # normpath keeps a POSIX '//' prefix that names the same file; macOS compares names
+            # case- and Unicode-normalisation-insensitively.
+            return unicodedata.normalize("NFC", "/" + posixpath.normpath(p).lstrip("/")).casefold()
+
+        resolved, root = canonical(path), canonical(f"{home}/.hermes")
         return resolved == root or resolved.startswith(root + "/")
 
     def _run_bash(self, cmd_string: str, *, login: bool = False, timeout: int = 120,
