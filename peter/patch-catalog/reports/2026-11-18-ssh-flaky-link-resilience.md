@@ -2,8 +2,8 @@
 
 - Date: 2026-11-18
 - Repo: `/opt/hermes-agent` (Peter's fork)
-- Patch refs: `bda02a6a82` `af6cc9b1e9` `c8cd3d4e54` `9362a57c75` `9102ba95e1` `87db5c4cb7` `1b0980a3d7`
-- Base: `peter/hermes-patches` @ `99a14664e4`; candidate branch `peter/ssh-flaky-link-resilience`
+- Patch refs: `a5777682e1` `f083a4399f` `bc98ceabd0` `11ac86fe67` `7eeaef18f8` `4a98ab6650` `e24a97a8cf`
+- Base: `peter/hermes-patches` @ `326a9be1bd` (rebased from `99a14664e4` onto your fork's skills-symlink update); candidate branch `peter/ssh-flaky-link-resilience`
 - Local status: reviewed candidate; integration and runtime activation pending Peter's approval
 - Disposition: local patch; upstream publication not requested
 
@@ -21,10 +21,10 @@ mux master had no keepalives.
 
 | Commit | Behaviour |
 |---|---|
-| `bda02a6a82` | `ServerAliveInterval=15`, `ServerAliveCountMax=3` on terminal-backend ssh (gateway transport values) |
-| `af6cc9b1e9` + `87db5c4cb7` | First sync failure still retries next cycle; from the 2nd consecutive failure, non-forced cycles back off 30→60→120→240→300 s; success resets; `force=True`/`HERMES_FORCE_FILE_SYNC` bypass |
-| `c8cd3d4e54` + `9102ba95e1` + `1b0980a3d7` | `skip_file_sync()` contextvar + `may_be_file_synced()`; guard reads skip sync only for absolute paths certainly outside the detected remote `~/.hermes` (case-, `//`- and NFC-insensitive); relative/`~` paths, a guessed home and backends without the hook keep syncing |
-| `9362a57c75` | Terminal guard timeout text no longer blames the identity probe (execute_code wording kept: its deadline wraps only that probe) |
+| `a5777682e1` | `ServerAliveInterval=15`, `ServerAliveCountMax=3` on terminal-backend ssh (gateway transport values) |
+| `f083a4399f` + `4a98ab6650` | First sync failure still retries next cycle; from the 2nd consecutive failure, non-forced cycles back off 30→60→120→240→300 s; success resets; `force=True`/`HERMES_FORCE_FILE_SYNC` bypass |
+| `bc98ceabd0` + `7eeaef18f8` + `e24a97a8cf` | `skip_file_sync()` contextvar + `may_be_file_synced()`; guard reads skip sync only for absolute paths certainly outside the detected remote `~/.hermes` (case-, `//`- and NFC-insensitive); relative/`~` paths, a guessed home and backends without the hook keep syncing |
+| `11ac86fe67` | Terminal guard timeout text no longer blames the identity probe (execute_code wording kept: its deadline wraps only that probe) |
 
 Accepted residuals: a symlink outside the sync tree pointing into it is read unsynced; while sync is
 backing off (≤ 300 s) remote commands may see stale skills/credentials (previously they did not run);
@@ -43,7 +43,7 @@ ControlPersist (300 s) expires it.
   returned in 63 s and the master exited; no-keepalive master → still hung at 159 s, master "running".
 - Live lad-studio smoke through the patched worktree: cold env 77.1 s, warm command 0.4 s, exit 0.
 - Two independent reviews: first raised relative-path, case, unset-home and SSH-path coverage
-  issues (all fixed in `9102ba95e1`); final review: no blockers; `//` and NFC notes fixed in `1b0980a3d7`.
+  issues (all fixed in `7eeaef18f8`); final review: no blockers; `//` and NFC notes fixed in `e24a97a8cf`.
 
 ## Upstream overlap
 
