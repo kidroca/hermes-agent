@@ -423,14 +423,18 @@ class SSHEnvironment(BaseEnvironment):
             self._sync_manager.sync()  # rate-limited internally
 
     def may_be_file_synced(self, path: str) -> bool:
-        """Sync writes only under the remote ``~/.hermes``. ``~`` paths are ambiguous (the remote
-        shell expands them) and stay conservatively covered."""
+        """Sync writes only under the remote ``~/.hermes`` (``_ssh_bulk_upload`` rejects anything
+        else). Whatever this cannot classify for certain counts as covered: ``~`` and relative
+        paths (the guard and the read may resolve them against different directories) and an
+        unknown remote home. Compared case-insensitively, as on a default macOS volume."""
         if self._sync_manager is None:
             return False
-        if path.startswith("~"):
+        home = getattr(self, "_remote_home", None)
+        # _detect_remote_home falls back to a guessed /home/<user> that need not be the real root.
+        if not home or not getattr(self, "_remote_home_detected", False) or not posixpath.isabs(path):
             return True
-        resolved = posixpath.normpath(path if posixpath.isabs(path) else posixpath.join(self.cwd, path))
-        root = posixpath.normpath(f"{self._remote_home}/.hermes")
+        resolved = posixpath.normpath(path).casefold()
+        root = posixpath.normpath(f"{home}/.hermes").casefold()
         return resolved == root or resolved.startswith(root + "/")
 
     def _run_bash(self, cmd_string: str, *, login: bool = False, timeout: int = 120,
