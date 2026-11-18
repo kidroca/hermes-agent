@@ -221,6 +221,9 @@ class SSHEnvironment(BaseEnvironment):
             cmd.extend(["-o", f"ControlPath={self._control_socket_for(send_env)}",
                         "-o", "ControlMaster=auto", "-o", "ControlPersist=300"])
         cmd.extend(["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10"])
+        # Without keepalives a stalled link hangs every mux client until its own timeout;
+        # these match the gateway SSH transport (gateway_connections_ssh_transport.py).
+        cmd.extend(["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"])
         # Names only; values ride the ssh client's own environment (never the remote command text).
         cmd.extend(arg for name in send_env for arg in ("-o", f"SendEnv={name}"))
         cmd.extend(self._target_flags("-p"))

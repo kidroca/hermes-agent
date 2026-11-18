@@ -86,6 +86,17 @@ class TestBuildSSHCommand:
         env = SSHEnvironment(host="h", user="u")
         assert env._build_ssh_command()[-1] == "u@h"
 
+    @pytest.mark.parametrize("multiplex", [True, False])
+    def test_keepalives_detect_a_dead_transport(self, monkeypatch, multiplex):
+        """A stalled link must fail within ServerAliveInterval*CountMax (~45 s) instead of
+        hanging every mux client until its per-call timeout."""
+        monkeypatch.setattr(ssh_env, "_SSH_MULTIPLEX", multiplex)
+        env = SSHEnvironment(host="h", user="u")
+        cmd = env._build_ssh_command()
+        assert "ServerAliveInterval=15" in cmd
+        assert "ServerAliveCountMax=3" in cmd
+        assert cmd[-1] == "u@h"
+
     def _capture_run_bash(self, monkeypatch, env, cmd="echo ok"):
         captured = {}
 
