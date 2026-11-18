@@ -349,13 +349,14 @@ class SSHEnvironment(BaseEnvironment):
                 manifest.writelines(os.fsencode(entry) + b"\0" for entry in tar_entries)
 
             tar_cmd = [
-                "tar", "--no-xattrs", "-chf", "-",
+                "tar", "--no-xattrs", "-czhf", "-",
                 "-C", staging, "--null", "-T", manifest_path,
             ]
             ssh_cmd = self._build_ssh_command()
             # The archive contains explicit file entries only, so portable
-            # extraction cannot overwrite metadata of existing parent dirs.
-            ssh_cmd.append(f"tar xf - -C {shlex.quote(base)}")
+            # extraction cannot overwrite metadata of existing parent dirs. gzip: the support tree
+            # is mostly text, and a mux client cannot enable ssh -C on an existing master.
+            ssh_cmd.append(f"tar xzf - -C {shlex.quote(base)}")
 
             # Preserve the caller's environment for the local tar process while
             # routing through the shared spawn-env guard. SSH sync may need

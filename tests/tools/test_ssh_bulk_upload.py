@@ -287,7 +287,7 @@ class TestSSHBulkUpload:
             ("cache/x.txt", True),
             ("skills/y.txt", True),
         ]
-        assert ssh_commands[0][-1] == "tar xf - -C /home/testuser/.hermes"
+        assert ssh_commands[0][-1] == "tar xzf - -C /home/testuser/.hermes"
         assert "--no-overwrite-dir" not in " ".join(ssh_commands[0])
 
 
